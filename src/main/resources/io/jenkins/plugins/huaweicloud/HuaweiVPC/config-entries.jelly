@@ -1,0 +1,29 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials" xmlns:st="jelly:stapler">
+    <f:entry title="${%Name}" field="cloudName">
+        <f:textbox/>
+    </f:entry>
+    <f:entry title="${%VPC-ID}" field="vpcID">
+        <f:textbox/>
+    </f:entry>
+    <f:entry field="credentialsId" title="${%Credentials}"
+             description="${%Credentials_DESC}">
+        <c:select/>
+    </f:entry>
+    <f:entry title="${%Region}" field="region">
+        <f:select />
+    </f:entry>
+    <f:entry field="sshKeysCredentialsId" title="${%Key Pair's Private Key}">
+        <c:select includeUser="false" checkMethod="post"/>
+    </f:entry>
+    <f:advanced title="${%Advanced}">
+        <f:entry title="${%InstanceCap}" field="instanceCapStr">
+            <f:textbox/>
+        </f:entry>
+        <f:entry title="${%NoDelayProvisioning}" field="noDelayProvisioning">
+            <f:checkbox/>
+        </f:entry>
+    </f:advanced>
+    <f:validateButton method="testConnection" title="${%TestConnection}" progress="${%Testing}"
+                      with="region,credentialsId,sshKeysCredentialsId"/>
+</j:jelly>

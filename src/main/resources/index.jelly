@@ -1,0 +1,6 @@
+<?jelly escape-by-default='true'?>
+<div>
+   This plugin integrates Jenkins with
+    <a href="https://huaweicloud.com/intl/zh-cn/product/ecs.html">Huawei ECS</a> or anything implementing
+    the ECS API's such as an Ubuntu.
+</div>

@@ -1,0 +1,111 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout"
+         xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:ec="/lib/hwc">
+    <ec:blockWrapper>
+        <f:entry title="${%Description}" field="description">
+            <f:textbox/>
+        </f:entry>
+        <f:entry title="${%IMG-ID}" field="imgID">
+            <f:textbox/>
+        </f:entry>
+        <f:entry title="${%FlavorID}" field="flavorID">
+            <f:textbox/>
+        </f:entry>
+        <f:entry title="${%Zone}" field="zone">
+            <f:select/>
+        </f:entry>
+        <f:entry title="${%Labels}" field="labelString">
+            <f:textbox/>
+        </f:entry>
+        <f:slave-mode name="mode" node="${instance}"/>
+
+        <f:entry title="${%RootVolume}" field="rootVolumeType">
+            <f:enum>${it.name()}</f:enum>
+        </f:entry>
+
+        <!-- The corresponding value cannot be obtained in the Descriptor
+        <f:entry title="${%NICs}" description="${%NicDesc}">
+             <f:repeatable field="nics" minimum="1">
+                 <st:include page="config.jelly" class="${descriptor.clazz}"/>
+             </f:repeatable>
+         </f:entry>-->
+        <f:entry title="${%VPCSubnetIDS}" field="subnetIDs">
+            <f:textbox/>
+        </f:entry>
+        <f:entry field="associateEIP" title="${%AssociatePublicIP}">
+            <f:checkbox/>
+        </f:entry>
+        <f:entry title="${%IdleTerminationTime}" field="idleTerminationMinutes" description="${%IdleTTDesc}">
+            <f:textbox default="30"/>
+        </f:entry>
+        <f:entry title="${%Remote FS root}" field="remoteFS">
+            <f:textbox/>
+        </f:entry>
+        <f:entry title="${%RemoteUser}" field="remoteAdmin">
+            <f:textbox/>
+        </f:entry>
+        <f:entry title="${%InitScript}" field="initScript">
+            <f:textarea/>
+        </f:entry>
+        <f:advanced title="${%Advanced}">
+            <f:entry title="${%TMPDIR}" field="tmpDir">
+                <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%User Data}" field="userData">
+                <f:textarea/>
+            </f:entry>
+
+            <f:entry title="${%ExecutorsNumber}" field="numExecutors">
+                <f:textbox/>
+            </f:entry>
+            <f:entry title="${%InstanceCap}" field="instanceCapStr">
+                <f:textbox/>
+            </f:entry>
+            <f:entry title="${%LaunchTimeout}" field="launchTimeoutStr">
+                <f:textbox/>
+            </f:entry>
+            <f:entry title="${%StopOnIdleTimeout}" field="stopOnTerminate">
+                <f:checkbox/>
+            </f:entry>
+            <f:entry title="${%MinimumNumberOfInstances}" field="minimumNumberOfInstances">
+                <f:textbox/>
+            </f:entry>
+            <f:entry title="${%RVSize}" field="rvSizeStr" description="${%RvSizeDesc}">
+                <f:textbox/>
+            </f:entry>
+            <f:optionalBlock title="${%MountDataVolume}" field="mountDV" checked="${instance.isMountDV()}"
+                             inline="true">
+                <f:entry title="${%VolumeType}" field="dvType">
+                    <f:enum>${it.name()}</f:enum>
+                </f:entry>
+                <f:entry field="dvSize" title="${%VolumeSize}">
+                    <f:textbox/>
+                </f:entry>
+                <f:entry field="mountQuantity" title="${%MountQuantity}">
+                    <f:textbox/>
+                </f:entry>
+            </f:optionalBlock>
+            <!--<f:entry title="${%DataVolumes}" description="${%DVDesc}">
+                <f:repeatable field="dvs">
+                    <st:include page="config.jelly" class="${descriptor.clazz}"/>
+                </f:repeatable>
+            </f:entry>-->
+            <f:entry title="${%Tags}" description="${%ECS Tag/Value Pairs}">
+                <f:repeatable field="tags">
+                    <st:include page="config.jelly" class="${descriptor.clazz}"/>
+                </f:repeatable>
+            </f:entry>
+            <f:descriptorList title="${%Node Properties}" field="nodeProperties"
+                              descriptors="${descriptor.nodePropertyDescriptors}"/>
+        </f:advanced>
+        <f:validateButton method="testCreateEcs" title="${%TestCreateEcs}" progress="${%Testing}"
+                          with="region,credentialsId,description,imgID,flavorID,zone,vpcID,rootVolumeType,dvType,rvSizeStr,associateEIP,subnetIDs,dvSize,mountQuantity,mountDV"
+        />
+        <f:entry title="">
+            <div align="right">
+                <f:repeatableDeleteButton value="Delete ECS"/>
+            </div>
+        </f:entry>
+    </ec:blockWrapper>
+</j:jelly>

@@ -1,0 +1,15 @@
+*.iml
+*.ipr
+*.iws
+.idea
+target
+
+.classpath
+.project
+.settings
+
+/bin
+/work
+/src_generated
+.history
+.factorypath

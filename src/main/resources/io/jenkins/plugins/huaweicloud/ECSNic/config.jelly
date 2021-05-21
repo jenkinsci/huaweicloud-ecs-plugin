@@ -1,0 +1,16 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:ec="/lib/hwc">
+    <ec:blockWrapper>
+        <f:entry title="${%SubnetID}" field="subnetId" description="${%SubnetIDDesc}">
+            <f:textbox/>
+        </f:entry>
+        <f:entry title="${%Support-IPV6}" field="ipv6">
+            <f:checkbox/>
+        </f:entry>
+        <f:entry title="">
+            <div align="right">
+                <f:repeatableDeleteButton value="delete nic"/>
+            </div>
+        </f:entry>
+    </ec:blockWrapper>
+</j:jelly>

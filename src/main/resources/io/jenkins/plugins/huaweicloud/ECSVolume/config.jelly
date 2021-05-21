@@ -1,0 +1,16 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:ec="/lib/hwc">
+    <ec:blockWrapper>
+        <f:entry title="${%VolumeType}" field="volumeType">
+            <f:enum>${it.name()}</f:enum>
+        </f:entry>
+        <f:entry title="${%VolumeSize}" field="volumeSize" description="${%VolumeDesc}">
+            <f:textbox/>
+        </f:entry>
+        <f:entry title="">
+            <div align="right">
+                <f:repeatableDeleteButton value="Delete Volume"/>
+            </div>
+        </f:entry>
+    </ec:blockWrapper>
+</j:jelly>
