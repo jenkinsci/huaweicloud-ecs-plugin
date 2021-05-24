@@ -17,7 +17,7 @@
         <changelist>-SNAPSHOT</changelist>
         <jenkins.version>2.277.1</jenkins.version>
         <java.level>8</java.level>
-        <hw-java-sdk.version>3.0.40-rc</hw-java-sdk.version>
+        <hw-java-sdk.version>3.0.43-rc</hw-java-sdk.version>
         <gitHubRepo>jenkinsci/${project.artifactId}-plugin</gitHubRepo>
     </properties>
     <name>TODO Plugin</name>
