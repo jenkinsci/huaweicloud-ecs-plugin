@@ -89,7 +89,7 @@ public class ECSComputer extends SlaveComputer {
      * Number of milli-secs since the instance was started.
      */
     public long getUptime() throws SdkException, InterruptedException {
-        return System.currentTimeMillis() - TimeUtils.DateStrToLong(describeInstance().getUpdated());
+        return System.currentTimeMillis() - TimeUtils.dateStrToLong(describeInstance().getUpdated());
     }
 
     /**

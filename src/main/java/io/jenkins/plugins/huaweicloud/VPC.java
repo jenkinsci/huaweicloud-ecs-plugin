@@ -8,18 +8,13 @@ import com.cloudbees.plugins.credentials.domains.DomainRequirement;
 import com.huaweicloud.sdk.core.auth.BasicCredentials;
 import com.huaweicloud.sdk.core.auth.GlobalCredentials;
 import com.huaweicloud.sdk.core.auth.ICredential;
-import com.huaweicloud.sdk.core.exception.ConnectionException;
-import com.huaweicloud.sdk.core.exception.RequestTimeoutException;
 import com.huaweicloud.sdk.core.exception.SdkException;
-import com.huaweicloud.sdk.core.exception.ServiceResponseException;
 import com.huaweicloud.sdk.ecs.v2.EcsClient;
 import com.huaweicloud.sdk.ecs.v2.model.*;
 import com.huaweicloud.sdk.ecs.v2.region.EcsRegion;
 import com.huaweicloud.sdk.eip.v2.EipClient;
 import com.huaweicloud.sdk.eip.v2.region.EipRegion;
 import com.huaweicloud.sdk.iam.v3.IamClient;
-import com.huaweicloud.sdk.iam.v3.model.KeystoneShowVersionRequest;
-import com.huaweicloud.sdk.iam.v3.model.KeystoneShowVersionResponse;
 import com.huaweicloud.sdk.iam.v3.region.IamRegion;
 import hudson.model.*;
 import hudson.security.ACL;
@@ -42,7 +37,6 @@ import javax.annotation.CheckForNull;
 import javax.servlet.ServletException;
 import java.io.*;
 import java.net.URL;
-import java.security.KeyPair;
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
@@ -396,7 +390,7 @@ public abstract class VPC extends Cloud {
                                     c.connect(false);
                                 }
 
-                                long startTime = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - TimeUtils.DateStrToLong(instance.getUpdated()));
+                                long startTime = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - TimeUtils.dateStrToLong(instance.getUpdated()));
                                 LOGGER.log(Level.INFO, "{0} Node {1} moved to RUNNING state in {2} seconds and is ready to be connected by Jenkins",
                                         new Object[]{t, slave.getNodeName(), startTime});
                                 return slave;
@@ -500,14 +494,14 @@ public abstract class VPC extends Cloud {
         }
     }
 
-    private int getPossibleNewSlavesCount(ECSTemplate t)  {
+    private int getPossibleNewSlavesCount(ECSTemplate t) {
         List<ServerDetail> allInstances = VPCHelper.getAllOfServerList(this);
         List<ServerDetail> tmpInstance = VPCHelper.getAllOfServerByTmp(t);
         int availableTotalSlave = instanceCap - allInstances.size();
         int availableTmpSlave = t.getInstanceCap() - tmpInstance.size();
         LOGGER.log(Level.FINE, "Available Total Slaves: " + availableTotalSlave + " Available AMI slaves: " + availableTmpSlave
-                + " AMI: " + t.getImgID()+ " TemplateDesc: " + t.description);
-        return Math.min(availableTotalSlave,availableTmpSlave);
+                + " AMI: " + t.getImgID() + " TemplateDesc: " + t.description);
+        return Math.min(availableTotalSlave, availableTmpSlave);
     }
 
     public static void log(Logger logger, Level level, TaskListener listener, String message) {
@@ -543,7 +537,8 @@ public abstract class VPC extends Cloud {
             for (Cloud c : Jenkins.get().clouds) {
                 if (c instanceof VPC) {
                     VPC vpc = (VPC) c;
-                    if (vpc.getVpcID() == value) {
+
+                    if (vpc.getVpcID() != null && vpc.getVpcID().equals(value)) {
                         found++;
                     }
                 }

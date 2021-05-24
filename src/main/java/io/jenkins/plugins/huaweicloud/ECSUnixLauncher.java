@@ -116,7 +116,7 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
             String initScript = node.initScript;
             String tmpDir = (Util.fixEmptyAndTrim(node.tmpDir) != null ? node.tmpDir : "/tmp");
             logInfo(computer, listener, "Creating tmp directory (" + tmpDir + ") if it does not exist");
-            int exec = conn.exec("mkdir -p " + tmpDir, logger);
+            conn.exec("mkdir -p " + tmpDir, logger);
             if (initScript != null && initScript.trim().length() > 0
                     && conn.exec("test -e ~/.hudson-run-init", logger) != 0) {
                 logInfo(computer, listener, "Executing init script");
@@ -272,7 +272,7 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
                 conn.connect(new ServerHostKeyVerifierImpl(computer, listener), slaveConnectTimeout, slaveConnectTimeout);
                 logInfo(computer, listener, "Connected via SSH.");
                 return conn; // successfully connected
-            } catch (Exception e) {
+            } catch (IOException e) {
                 // keep retrying until SSH comes up
                 logInfo(computer, listener, "Failed to connect via ssh: " + e.getMessage());
 

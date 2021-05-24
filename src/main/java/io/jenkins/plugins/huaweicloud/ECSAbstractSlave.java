@@ -228,7 +228,7 @@ public abstract class ECSAbstractSlave extends Slave {
         if (instance == null) {
             return;
         }
-        createdTime = TimeUtils.DateStrToLong(instance.getCreated());
+        createdTime = TimeUtils.dateStrToLong(instance.getCreated());
         try {
             List<ServerTag> serverTags = VPCHelper.getServerTags(getInstanceId(), getCloud());
             if (!serverTags.isEmpty()) {

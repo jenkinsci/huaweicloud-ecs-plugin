@@ -456,10 +456,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
      * Provisions a new EC2 slave based on the currently running instance on EC2, instead of starting a new one.
      */
     public ECSAbstractSlave attach(String instanceId, TaskListener listener) throws SdkException, IOException {
-        PrintStream logger = listener.getLogger();
-        EcsClient ecsClient = getParent().getEcsClient();
         try {
-            logger.println("Attaching to " + instanceId);
             LOGGER.info("Attaching to " + instanceId);
             ServerDetail instance = getServerDetail(instanceId);
             return newOnDemandSlave(instance);

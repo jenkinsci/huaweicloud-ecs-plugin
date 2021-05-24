@@ -90,7 +90,7 @@ public class VPCHelper {
                 .withType(BatchStopServersOption.TypeEnum.fromValue("SOFT"));
         body.withOsStop(osStopBody);
         request.withBody(body);
-        BatchStopServersResponse response = ecsClient.batchStopServers(request);
+        ecsClient.batchStopServers(request);
     }
 
     public static void startEcsInstances(List<String> instances, VPC vpc) throws SdkException {

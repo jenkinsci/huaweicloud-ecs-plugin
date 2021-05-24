@@ -6,7 +6,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 public class TimeUtils {
-    public static long DateStrToLong(String dateStr) {
+    public static long dateStrToLong(String dateStr) {
         DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
         long lDate = 0;
         try {

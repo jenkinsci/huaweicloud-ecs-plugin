@@ -5,8 +5,6 @@ import org.kohsuke.stapler.DataBoundSetter;
 
 public class AssociateEIP {
     private String eipType;
-    private String chargingMode = "postPaid";
-    private String shareType;
     private String sizeStr;
     private int size;
 
@@ -16,15 +14,6 @@ public class AssociateEIP {
 
     public void setSize(int size) {
         this.size = size;
-    }
-
-    public String getShareType() {
-        return shareType;
-    }
-
-    @DataBoundSetter
-    public void setShareType(String shareType) {
-        this.shareType = shareType;
     }
 
     public String getSizeStr() {
