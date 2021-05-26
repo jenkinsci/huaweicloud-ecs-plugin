@@ -5,7 +5,6 @@ import com.huaweicloud.sdk.ecs.v2.EcsClient;
 import com.huaweicloud.sdk.ecs.v2.model.*;
 import hudson.util.Secret;
 import io.jenkins.plugins.huaweicloud.util.KeyFingerprinter;
-import io.jenkins.plugins.huaweicloud.util.VPCHelper;
 import jenkins.bouncycastle.api.PEMEncodable;
 import org.apache.commons.lang.StringUtils;
 import org.bouncycastle.crypto.CryptoException;

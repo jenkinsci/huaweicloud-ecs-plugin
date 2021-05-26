@@ -15,6 +15,7 @@ import javax.annotation.Nonnull;
 import java.time.Clock;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 @Restricted(NoExternalUse.class)
@@ -39,15 +40,15 @@ public class MinimumInstanceChecker {
     public static int countCurrentNumberOfSpareAgents(@Nonnull ECSTemplate agentTemplate) {
         return (int) agentsForTemplate(agentTemplate)
                 .filter(computer -> computer.countBusy() == 0)
-                .filter(computer -> computer.isOnline())
+                .filter(Computer::isOnline)
                 .count();
     }
 
     public static int countCurrentNumberOfProvisioningAgents(@Nonnull ECSTemplate agentTemplate) {
         return (int) agentsForTemplate(agentTemplate)
                 .filter(computer -> computer.countBusy() == 0)
-                .filter(computer -> computer.isOffline())
-                .filter(computer -> computer.isConnecting())
+                .filter(Computer::isOffline)
+                .filter(Computer::isConnecting)
                 .count();
     }
 
@@ -60,7 +61,7 @@ public class MinimumInstanceChecker {
                         .getInstance()
                         .getBuildableItems()
                         .stream()
-                        .map((Queue.Item item) -> item.getAssignedLabel())
+                        .map((Function<Queue.Item, Label>) Queue.Item::getAssignedLabel)
                         .filter(Objects::nonNull)
                         .filter((Label label) -> label.matches(agentTemplate.getLabelSet()))
                         .count();

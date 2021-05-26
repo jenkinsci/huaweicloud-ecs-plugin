@@ -9,6 +9,7 @@ import hudson.util.FormValidation;
 import hudson.util.Secret;
 import io.jenkins.cli.shaded.org.apache.commons.lang.StringUtils;
 import io.jenkins.plugins.huaweicloud.Messages;
+import org.jetbrains.annotations.NotNull;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
@@ -50,7 +51,7 @@ public class HWCAccessKeyCredentials extends BaseStandardCredentials implements 
     public static class DescriptorImpl extends CredentialsDescriptor {
 
         @Override
-        public String getDisplayName() {
+        public @NotNull String getDisplayName() {
             return Messages.HuaweiECSCloud_Credentials_Name();
         }
 

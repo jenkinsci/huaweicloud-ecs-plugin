@@ -3,7 +3,7 @@ package io.jenkins.plugins.huaweicloud;
 public enum VolumeType {
     SATA("SATA"), SAS("SAS"), SSD("SSD"), GPSSD("GPSSD"), co_p1("co-p1"), uh_l1("uh-l1");
 
-    private String value;
+    private final String value;
 
     VolumeType(String value) {
         this.value = value;

@@ -14,7 +14,7 @@ import java.util.logging.Logger;
 /**
  * Implementation of {@link NodeProvisioner.Strategy} which will provision a new node immediately as
  * a task enter the queue.
- * Now that EC2 is billed by the minute, we don't really need to wait before provisioning a new node.
+ * Now that ECS is billed by the minute, we don't really need to wait before provisioning a new node.
  *
  * @author <a href="mailto:nicolas.deloof@gmail.com">Nicolas De Loof</a>
  */

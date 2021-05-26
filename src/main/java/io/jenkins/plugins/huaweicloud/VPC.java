@@ -51,28 +51,15 @@ import static javax.servlet.http.HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
 
 public abstract class VPC extends Cloud {
     private static final Logger LOGGER = Logger.getLogger(VPC.class.getName());
-    @CheckForNull
     private final String credentialsId;
-    @CheckForNull
     private final String sshKeysCredentialsId;
-
-    @CheckForNull
     private final String vpcID;
-
     private String region;
-
     private final int instanceCap;
-
     private static final SimpleFormatter sf = new SimpleFormatter();
-
     private final List<? extends ECSTemplate> templates;
     private transient NovaKeypair usableKeyPair;
-
     private transient ReentrantLock slaveCountingLock = new ReentrantLock();
-
-    public String getCredentialsId() {
-        return credentialsId;
-    }
 
     protected VPC(String id, @CheckForNull String credentialsId, @CheckForNull String sshKeysCredentialsId, String instanceCapStr,
                   String vpcID, List<? extends ECSTemplate> templates) {
@@ -94,6 +81,10 @@ public abstract class VPC extends Cloud {
         }
 
         readResolve();
+    }
+
+    public String getCredentialsId() {
+        return credentialsId;
     }
 
     public String getRegion() {
@@ -175,22 +166,6 @@ public abstract class VPC extends Cloud {
     }
 
     public abstract URL getEc2EndpointUrl() throws IOException;
-
-    public static ICredential createGlobalCredential(String credentialsId) {
-        AccessKeyCredentials acCredentials = getCredentials(credentialsId);
-        String accessKey = acCredentials.getAccessKey().getPlainText();
-        String secretKey = acCredentials.getSecretKey().getPlainText();
-        ICredential auth = new GlobalCredentials().withAk(accessKey).withSk(secretKey);
-        return auth;
-    }
-
-    public static ICredential createBasicCredential(String credentialsId) {
-        AccessKeyCredentials acCredentials = getCredentials(credentialsId);
-        String accessKey = acCredentials.getAccessKey().getPlainText();
-        String secretKey = acCredentials.getSecretKey().getPlainText();
-        ICredential auth = new BasicCredentials().withAk(accessKey).withSk(secretKey);
-        return auth;
-    }
 
     @CheckForNull
     private static SSHUserPrivateKey getSshCredential(String id) {
@@ -287,44 +262,9 @@ public abstract class VPC extends Cloud {
         return usableKeyPair;
     }
 
-    public static IamClient createIamClient(String region, String credentialsId) {
-        ICredential auth = createGlobalCredential(credentialsId);
-        return IamClient.newBuilder()
-                .withCredential(auth)
-                .withRegion(IamRegion.valueOf(region))
-                .build();
-    }
-
-    public static EcsClient createEcsClient(String region, String credentialsId) {
-        ICredential auth = createBasicCredential(credentialsId);
-        return EcsClient.newBuilder()
-                .withCredential(auth)
-                .withRegion(EcsRegion.valueOf(region))
-                .build();
-    }
-
-    public static EipClient createEipClient(String region, String credentialsId) {
-        ICredential auth = createBasicCredential(credentialsId);
-        return EipClient.newBuilder()
-                .withCredential(auth)
-                .withRegion(EipRegion.valueOf("cn-south-1"))
-                .build();
-    }
-
-    public static AccessKeyCredentials getCredentials(@CheckForNull String credentialsId) {
-        if (StringUtils.isBlank(credentialsId)) {
-            return null;
-        }
-        return (AccessKeyCredentials) CredentialsMatchers.firstOrNull(
-                CredentialsProvider.lookupCredentials(
-                        HWCAccessKeyCredentials.class, Jenkins.get(),
-                        ACL.SYSTEM, Collections.EMPTY_LIST),
-                CredentialsMatchers.withId(credentialsId));
-    }
-
-
     @Override
-    public Collection<NodeProvisioner.PlannedNode> provision(final Label label, int excessWorkload) {
+    public Collection<NodeProvisioner.PlannedNode> provision(final Cloud.CloudState state, int excessWorkload) {
+        Label label = state.getLabel();
         final Collection<ECSTemplate> matchingTemplates = getTemplates(label);
         List<NodeProvisioner.PlannedNode> plannedNodes = new ArrayList<>();
 
@@ -416,8 +356,8 @@ public abstract class VPC extends Cloud {
     }
 
     @Override
-    public boolean canProvision(Label label) {
-        return !getTemplates(label).isEmpty();
+    public boolean canProvision(Cloud.CloudState state) {
+        return !getTemplates(state.getLabel()).isEmpty();
     }
 
     public void provision(ECSTemplate t, int number) {
@@ -518,6 +458,68 @@ public abstract class VPC extends Cloud {
             PrintStream printStream = listener.getLogger();
             printStream.print(sf.format(lr));
         }
+    }
+
+    private static String getAccessKey(AccessKeyCredentials acCredentials) {
+        if (acCredentials == null) {
+            return "";
+        }
+        return acCredentials.getAccessKey() == null ? "" : acCredentials.getAccessKey().getPlainText();
+    }
+
+    private static String getSecretKey(AccessKeyCredentials acCredentials) {
+        if (acCredentials == null) {
+            return "";
+        }
+        return acCredentials.getSecretKey() == null ? "" : acCredentials.getSecretKey().getPlainText();
+    }
+
+    public static ICredential createGlobalCredential(String credentialsId) {
+        AccessKeyCredentials acCredentials = getCredentials(credentialsId);
+        String accessKey = getAccessKey(acCredentials);
+        String secretKey = getSecretKey(acCredentials);
+        return new GlobalCredentials().withAk(accessKey).withSk(secretKey);
+    }
+
+    public static ICredential createBasicCredential(String credentialsId) {
+        AccessKeyCredentials acCredentials = getCredentials(credentialsId);
+        String accessKey = getAccessKey(acCredentials);
+        String secretKey = getSecretKey(acCredentials);
+        return new BasicCredentials().withAk(accessKey).withSk(secretKey);
+    }
+
+    public static IamClient createIamClient(String region, String credentialsId) {
+        ICredential auth = createGlobalCredential(credentialsId);
+        return IamClient.newBuilder()
+                .withCredential(auth)
+                .withRegion(IamRegion.valueOf(region))
+                .build();
+    }
+
+    public static EcsClient createEcsClient(String region, String credentialsId) {
+        ICredential auth = createBasicCredential(credentialsId);
+        return EcsClient.newBuilder()
+                .withCredential(auth)
+                .withRegion(EcsRegion.valueOf(region))
+                .build();
+    }
+
+    public static EipClient createEipClient(String region, String credentialsId) {
+        ICredential auth = createBasicCredential(credentialsId);
+        return EipClient.newBuilder()
+                .withCredential(auth)
+                .withRegion(EipRegion.valueOf("cn-south-1"))
+                .build();
+    }
+
+    public static AccessKeyCredentials getCredentials(@CheckForNull String credentialsId) {
+        if (StringUtils.isBlank(credentialsId)) {
+            return null;
+        }
+        return (AccessKeyCredentials) CredentialsMatchers.firstOrNull(
+                CredentialsProvider.lookupCredentials(
+                        HWCAccessKeyCredentials.class, Jenkins.get(), ACL.SYSTEM, Collections.EMPTY_LIST),
+                CredentialsMatchers.withId(credentialsId));
     }
 
     public static abstract class DescriptorImpl extends Descriptor<Cloud> {

@@ -5,6 +5,7 @@ import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
 import hudson.util.FormValidation;
 import org.apache.commons.lang.StringUtils;
+import org.jetbrains.annotations.NotNull;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
@@ -29,7 +30,7 @@ public class ECSNic extends AbstractDescribableImpl<ECSNic> {
     @Extension
     public static class DescriptorImpl extends Descriptor<ECSNic> {
         @Override
-        public String getDisplayName() {
+        public @NotNull String getDisplayName() {
             return "";
         }
 

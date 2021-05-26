@@ -116,12 +116,12 @@ public class VPCHelper {
         return response.getPublicip();
     }
 
-    public static List<ServerDetail> getAllOfServerList(VPC vpc)   {
+    public static List<ServerDetail> getAllOfServerList(VPC vpc) {
         List<ServerDetail> instances = new ArrayList<>();
         EcsClient ecsClient = vpc.getEcsClient();
         int offset = 1;
         int limit = 25;
-        int currentSize = 0;
+        int currentSize;
         do {
             ListServersDetailsRequest request = new ListServersDetailsRequest();
             request.withLimit(limit).withOffset(offset);
@@ -143,14 +143,14 @@ public class VPCHelper {
         EcsClient ecsClient = template.getParent().getEcsClient();
         int offset = 1;
         int limit = 25;
-        int currentSize = 0;
+        int currentSize;
         do {
             ListServersDetailsRequest request = new ListServersDetailsRequest();
             request.withLimit(limit).withOffset(offset).withFlavor(template.getFlavorID()).withName(ECSTemplate.srvNamePrefix);
             try {
                 ListServersDetailsResponse response = ecsClient.listServersDetails(request);
                 currentSize = response.getCount();
-                instances.addAll(filterInstance(response.getServers(),template));
+                instances.addAll(filterInstance(response.getServers(), template));
                 offset++;
             } catch (SdkException e) {
                 e.printStackTrace();
@@ -176,6 +176,7 @@ public class VPCHelper {
         }
         return filterInstance;
     }
+
     private static List<ServerDetail> filterDeleteInstance(List<ServerDetail> servers) {
         List<ServerDetail> sds = new ArrayList<>();
         for (ServerDetail sd : servers) {

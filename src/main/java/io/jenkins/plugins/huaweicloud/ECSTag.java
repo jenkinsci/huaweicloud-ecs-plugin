@@ -4,6 +4,7 @@ import com.huaweicloud.sdk.ecs.v2.model.ServerTag;
 import hudson.Extension;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
+import org.jetbrains.annotations.NotNull;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 import java.util.LinkedList;
@@ -56,10 +57,7 @@ public class ECSTag extends AbstractDescribableImpl<ECSTag> {
         ECSTag other = (ECSTag) o;
         if ((name == null && other.name != null) || (name != null && !name.equals(other.name)))
             return false;
-        if ((value == null && other.value != null) || (value != null && !value.equals(other.value)))
-            return false;
-
-        return true;
+        return (value != null || other.value == null) && (value == null || value.equals(other.value));
     }
 
     @Override
@@ -70,7 +68,7 @@ public class ECSTag extends AbstractDescribableImpl<ECSTag> {
     @Extension
     public static class DescriptorImpl extends Descriptor<ECSTag> {
         @Override
-        public String getDisplayName() {
+        public @NotNull String getDisplayName() {
             return "";
         }
 

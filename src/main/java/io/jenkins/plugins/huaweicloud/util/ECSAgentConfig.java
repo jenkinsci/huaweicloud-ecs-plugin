@@ -19,12 +19,8 @@ public abstract class ECSAgentConfig {
     final String remoteAdmin;
     final List<ECSTag> tags;
     final String cloudName;
-    //final String jvmopts;
     final String idleTerminationMinutes;
     final int launchTimeout;
-    /* final AMITypeData amiType;
-    final ConnectionStrategy connectionStrategy;
-    final int maxTotalUses;*/
 
     private ECSAgentConfig(Builder<? extends Builder, ? extends ECSAgentConfig> builder) {
         this.name = builder.name;
@@ -37,34 +33,21 @@ public abstract class ECSAgentConfig {
         this.tmpDir = builder.tmpDir;
         this.nodeProperties = builder.nodeProperties;
         this.remoteAdmin = builder.remoteAdmin;
-        // this.jvmopts = builder.jvmopts;
         this.idleTerminationMinutes = builder.idleTerminationMinutes;
         this.tags = builder.tags;
         this.cloudName = builder.cloudName;
         this.launchTimeout = builder.launchTimeout;
-        /*  this.amiType = builder.amiType;
-        this.connectionStrategy = builder.connectionStrategy;
-        this.maxTotalUses = builder.maxTotalUses;*/
     }
 
     public static class OnDemand extends ECSAgentConfig {
 
         final String instanceId;
         final boolean stopOnTerminate;
-       /* final String publicDNS;
-        final String privateDNS;
-        //final Tenancy tenancy;
-        @Deprecated
-        final boolean useDedicatedTenancy;*/
 
         private OnDemand(OnDemandBuilder builder) {
             super(builder);
             this.instanceId = builder.getInstanceId();
             this.stopOnTerminate = builder.isStopOnTerminate();
-            /*this.publicDNS = builder.getPublicDNS();
-            this.privateDNS = builder.getPrivateDNS();
-            //this.tenancy = builder.getTenancyAttribute();
-            this.useDedicatedTenancy = builder.isUseDedicatedTenancy();*/
         }
     }
 
@@ -79,14 +62,11 @@ public abstract class ECSAgentConfig {
         private String tmpDir;
         private List<? extends NodeProperty<?>> nodeProperties;
         private String remoteAdmin;
-        /*private String jvmopts;*/
         private String idleTerminationMinutes;
         private List<ECSTag> tags;
         private String cloudName;
         private int launchTimeout;
-       /* private AMITypeData amiType;
-        private ConnectionStrategy connectionStrategy;
-        private int maxTotalUses;*/
+
 
         public B withName(String name) {
             this.name = name;

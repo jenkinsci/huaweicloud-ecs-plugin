@@ -11,6 +11,7 @@ import hudson.slaves.NodeProperty;
 import io.jenkins.plugins.huaweicloud.util.VPCHelper;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
+import org.jetbrains.annotations.NotNull;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 
@@ -92,7 +93,7 @@ public class ECSOndemandSlave extends ECSAbstractSlave {
     @Extension
     public static final class DescriptorImpl extends ECSAbstractSlave.DescriptorImpl {
         @Override
-        public String getDisplayName() {
+        public @NotNull String getDisplayName() {
             return Messages.ECSOnDemandSlave_HuaweiECS();
         }
     }

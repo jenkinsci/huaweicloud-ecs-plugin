@@ -23,7 +23,6 @@ import java.util.List;
 public class HuaweiVPC extends VPC {
 
     public static final String CLOUD_ID_PREFIX = "ecs-";
-
     private boolean noDelayProvisioning;
 
     @DataBoundConstructor
@@ -32,11 +31,9 @@ public class HuaweiVPC extends VPC {
         super(createCloudId(cloudName), credentialsId, sshKeysCredentialsId, instanceCapStr, vpcID, templates);
     }
 
-
     public boolean isNoDelayProvisioning() {
         return noDelayProvisioning;
     }
-
 
     @DataBoundSetter
     public void setNoDelayProvisioning(boolean noDelayProvisioning) {
@@ -60,7 +57,6 @@ public class HuaweiVPC extends VPC {
     public String getDisplayName() {
         return getCloudName();
     }
-
 
     @Extension
     public static class DescriptorImpl extends VPC.DescriptorImpl {
@@ -99,7 +95,7 @@ public class HuaweiVPC extends VPC {
         @RequirePOST
         public ListBoxModel doFillRegionItems() {
             ListBoxModel model = new ListBoxModel();
-            model.add("-none(无)-", "");
+            model.add(Messages.UI_NoSelect(), "");
             model.add("Africa-Johannesburg(非洲-约翰内斯堡)", "af-south-1");
             model.add("Asia Pacific-Hong Kong(亚太-香港)", "af-south-1");
             model.add("Asia Pacific-Bangkok(亚太-曼谷)", "ap-southeast-2");

@@ -1,5 +1,6 @@
 package io.jenkins.plugins.huaweicloud;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
@@ -42,6 +43,7 @@ public class ECSVolume extends AbstractDescribableImpl<ECSVolume> {
 
     @Extension
     public static class DescriptorImpl extends Descriptor<ECSVolume> {
+        @NonNull
         @Override
         public String getDisplayName() {
             return "";

@@ -75,7 +75,7 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
      * the EC2 instance is already running
      */
     @Override
-    public void start(ECSComputer c) {
+    public void start(@NotNull ECSComputer c) {
         //Jenkins is in the process of starting up
         if (Jenkins.get().getInitLevel() != InitMilestone.COMPLETED) {
             String state = null;
@@ -99,7 +99,7 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
     // @Extension
     public static class DescriptorImpl extends Descriptor<RetentionStrategy<?>> {
         @Override
-        public String getDisplayName() {
+        public @NotNull String getDisplayName() {
             return "EC2";
         }
     }
@@ -138,19 +138,12 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
 
     private void postJobAction(Executor executor) {
         ECSComputer computer = (ECSComputer) executor.getOwner();
-        if (computer != null) {
-            ECSAbstractSlave slaveNode = computer.getNode();
-            if (slaveNode != null) {
-                // At this point, if agent is in suspended state and has 1 last executer running, it is safe to terminate.
-                if (computer.countBusy() <= 1 && !computer.isAcceptingTasks()) {
-                    LOGGER.info("Agent " + slaveNode.getInstanceId() + " is terminated due to maxTotalUses ");
-                    slaveNode.terminate();
-                }
-                /*else {
-                    if (slaveNode.maxTotalUses == 1) {
-                        LOGGER.info("Agent " + slaveNode.getInstanceId() + " is still in use by more than one (" + computer.countBusy() + ") executers.");
-                    }
-                }*/
+        ECSAbstractSlave slaveNode = computer.getNode();
+        if (slaveNode != null) {
+            // At this point, if agent is in suspended state and has 1 last executer running, it is safe to terminate.
+            if (computer.countBusy() <= 1 && !computer.isAcceptingTasks()) {
+                LOGGER.info("Agent " + slaveNode.getInstanceId() + " is terminated due to maxTotalUses ");
+                slaveNode.terminate();
             }
         }
     }
@@ -163,9 +156,9 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
             try {
                 long currentTime = this.clock.millis();
                 if (currentTime > nextCheckAfter) {
-                    long intervalMins = internalCheck(ecsComputer);
-                    nextCheckAfter = currentTime + TimeUnit.MINUTES.toMillis(intervalMins);
-                    return intervalMins;
+                    long intervalMinutes = internalCheck(ecsComputer);
+                    nextCheckAfter = currentTime + TimeUnit.MINUTES.toMillis(intervalMinutes);
+                    return intervalMinutes;
                 } else {
                     return 1;
                 }
@@ -186,10 +179,7 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
         if (slaveTemplate != null) {
             long numberOfCurrentInstancesForTemplate = MinimumInstanceChecker.countCurrentNumberOfAgents(slaveTemplate);
             if (numberOfCurrentInstancesForTemplate > 0 && numberOfCurrentInstancesForTemplate <= slaveTemplate.getMinimumNumberOfInstances()) {
-               /* TODO:Check if we're in an active time-range for keeping minimum number of instances
-                if (MinimumInstanceChecker.minimumInstancesActive(slaveTemplate.getMinimumNumberOfInstancesTimeRangeConfig())) {
-                    return 1;
-                }*/
+               // TODO:Check if we're in an active time-range for keeping minimum number of instances
                 return 1;
             }
         }
@@ -212,7 +202,7 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
                 return 1;
             }
 
-            //on rare occasions, HWC may return fault instance which shows running in AWS console but can not be connected.
+            //on rare occasions, HWC may return fault instance which shows running in Huawei cloud console but can not be connected.
             //need terminate such fault instance.
             //an instance may also fail running user data scripts and need to be cleaned up.
             if (computer.isOffline()) {
@@ -237,9 +227,7 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
             }
             final long idleMilliseconds = this.clock.millis() - computer.getIdleStartMilliseconds();
             if (idleTerminationMinutes > 0) {
-                // TODO: really think about the right strategy here, see
-                // JENKINS-23792
-
+                // TODO: really think about the right strategy here, see  JENKINS-23792
                 if (idleMilliseconds > TimeUnit.MINUTES.toMillis(idleTerminationMinutes)) {
 
                     LOGGER.info("Idle timeout of " + computer.getName() + " after "

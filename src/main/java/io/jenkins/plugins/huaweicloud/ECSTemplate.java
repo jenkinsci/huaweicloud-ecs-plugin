@@ -18,14 +18,12 @@ import io.jenkins.plugins.huaweicloud.util.ECSAgentFactory;
 import io.jenkins.plugins.huaweicloud.util.VPCHelper;
 import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
-import jnr.ffi.Struct;
 import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import java.io.IOException;
-import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.logging.Level;
@@ -39,8 +37,8 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     public final String description;
     protected transient VPC parent;
     private String imgID;
-    private String flavorID;
-    private String zone;
+    private final String flavorID;
+    private final String zone;
     public final String labels;
     public final Node.Mode mode;
     private final String subnetIDs;
@@ -59,7 +57,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     public static final String srvNamePrefix = "JenkinsHWCSlave_";
     private /* lazily initialized */ DescribableList<NodeProperty<?>, NodePropertyDescriptor> nodeProperties;
     private transient/* almost final */ Set<LabelAtom> labelSet;
-    private int minimumNumberOfInstances;
+    private final int minimumNumberOfInstances;
     public final boolean stopOnTerminate;
     private final String userData;
     public String currentSubnetId;
@@ -191,13 +189,6 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         return subnetIdList;
     }
 
-   /* public List<ECSVolume> getDvs() {
-        if (null == dvs) {
-            return null;
-        }
-        return Collections.unmodifiableList(dvs);
-    }*/
-
     public String getLabelString() {
         return labels;
     }
@@ -320,7 +311,6 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         ShowJobRequest request = new ShowJobRequest();
         request.withJobId(jobID);
         while (true) {
-            serverIds.clear();
             ShowJobResponse response = ecsClient.showJob(request);
             ShowJobResponse.StatusEnum status = response.getStatus();
             for (SubJob sj : response.getEntities().getSubJobs()) {
@@ -382,7 +372,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
 
         //setting server public ip
         if (associateEIP) {
-            PostPaidServerPublicip publicIp = genECSIP();
+            PostPaidServerPublicip publicIp = genEcsIP();
             serverBody.withPublicip(publicIp);
         }
 
@@ -449,22 +439,18 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             }
             return slaves;
         } catch (Descriptor.FormException e) {
-            throw new AssertionError(e); // we should have discovered all
-            // configuration issues upfront
+            throw new AssertionError(e); // we should have discovered all configuration issues upfront
         }
     }
 
-    /**
-     * Provisions a new EC2 slave based on the currently running instance on EC2, instead of starting a new one.
-     */
+    // Provisions a new ECS slave based on the currently running instance on ECS, instead of starting a new one.
     public ECSAbstractSlave attach(String instanceId, TaskListener listener) throws SdkException, IOException {
         try {
             LOGGER.info("Attaching to " + instanceId);
             ServerDetail instance = getServerDetail(instanceId);
             return newOnDemandSlave(instance);
         } catch (Descriptor.FormException e) {
-            throw new AssertionError(); // we should have discovered all
-            // configuration issues upfront
+            throw new AssertionError(); // we should have discovered all configuration issues upfront
         }
     }
 
@@ -504,9 +490,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
     }
 
-    /**
-     * Initializes data structure that we don't persist.
-     */
+    //Initializes data structure that we don't persist.
     protected Object readResolve() {
         Jenkins.get().checkPermission(Jenkins.ADMINISTER);
 
@@ -572,18 +556,18 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     }
 
     private static List<PostPaidServerNic> genNicsData(List<String> nics) {
-        List<PostPaidServerNic> listServerNics = new ArrayList<>();
+        List<PostPaidServerNic> serverNicList = new ArrayList<>();
         if (nics == null) {
-            return listServerNics;
+            return serverNicList;
         }
         if (nics.size() > 0) {
             for (String nic : nics) {
-                PostPaidServerNic ppsn = new PostPaidServerNic();
-                ppsn.withSubnetId(nic);
-                listServerNics.add(ppsn);
+                PostPaidServerNic ppsNic = new PostPaidServerNic();
+                ppsNic.withSubnetId(nic);
+                serverNicList.add(ppsNic);
             }
         }
-        return listServerNics;
+        return serverNicList;
     }
 
     private static PostPaidServerRootVolume genRootVolumeData(String vType, int rvSize) {
@@ -594,20 +578,20 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         return rootVolumeServer;
     }
 
-    private static PostPaidServerPublicip genECSIP() {
-        PostPaidServerEipExtendParam extendparamEip = new PostPaidServerEipExtendParam();
-        extendparamEip.withChargingMode(PostPaidServerEipExtendParam.ChargingModeEnum.fromValue("postPaid"));
+    private static PostPaidServerPublicip genEcsIP() {
+        PostPaidServerEipExtendParam extendParamEip = new PostPaidServerEipExtendParam();
+        extendParamEip.withChargingMode(PostPaidServerEipExtendParam.ChargingModeEnum.fromValue("postPaid"));
         PostPaidServerEipBandwidth bandwidthEip = new PostPaidServerEipBandwidth();
         bandwidthEip.withSize(50)
                 .withSharetype(PostPaidServerEipBandwidth.SharetypeEnum.fromValue("PER"))
                 .withChargemode("traffic");
-        PostPaidServerEip eipPublicip = new PostPaidServerEip();
-        eipPublicip.withIptype("5_bgp")
+        PostPaidServerEip eipPublicIP = new PostPaidServerEip();
+        eipPublicIP.withIptype("5_bgp")
                 .withBandwidth(bandwidthEip)
-                .withExtendparam(extendparamEip);
-        PostPaidServerPublicip publicipServer = new PostPaidServerPublicip();
-        publicipServer.withEip(eipPublicip);
-        return publicipServer;
+                .withExtendparam(extendParamEip);
+        PostPaidServerPublicip publicIPServer = new PostPaidServerPublicip();
+        publicIPServer.withEip(eipPublicIP);
+        return publicIPServer;
     }
 
     private static List<PostPaidServerTag> genTagsData(List<ECSTag> tags) {
@@ -629,7 +613,6 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         public String getDisplayName() {
             return "";
         }
-
 
         public FormValidation doCheckFlavorID(@QueryParameter String flavorID) {
             if (StringUtils.isBlank(flavorID)) {
@@ -662,14 +645,14 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
 
         public FormValidation doCheckMountQuantity(@QueryParameter String mountQuantity) {
-            int sz = 1;
             try {
-                sz = Integer.parseInt(mountQuantity);
+                int sz = Integer.parseInt(mountQuantity);
                 if (sz > 23 || sz <= 0) {
                     return FormValidation.error("Please fill in the correct data volume quantity");
                 }
             } catch (Exception e) {
                 LOGGER.info(e.getMessage());
+                return FormValidation.error("Please fill in the correct data volume quantity");
             }
             return FormValidation.ok();
         }
@@ -693,7 +676,8 @@ public class ECSTemplate implements Describable<ECSTemplate> {
                     }
                     return FormValidation.ok();
                 }
-            } catch (NumberFormatException ignore) {
+            } catch (NumberFormatException e) {
+                LOGGER.log(Level.INFO, e.getMessage());
             }
             return FormValidation.error("Minimum number of instances must be a non-negative integer (or null)");
         }
@@ -743,6 +727,9 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         public ListBoxModel doFillZoneItems(@QueryParameter String zone, @RelativePath("..") @QueryParameter String region,
                                             @RelativePath("..") @QueryParameter String credentialsId) {
             ListBoxModel model = new ListBoxModel();
+            if (StringUtils.isBlank(zone)) {
+                model.add(new ListBoxModel.Option(Messages.UI_NoSelect(), "", true));
+            }
             if (StringUtils.isEmpty(region) || StringUtils.isEmpty(credentialsId)) {
                 return model;
             }
@@ -819,8 +806,8 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             // setting network card
             String[] s = subnetIDs.split(" ");
             List<String> subnetIDList = new ArrayList<>(Arrays.asList(s));
-            List<PostPaidServerNic> listServerNics = genNicsData(subnetIDList);
-            serverBody.withNics(listServerNics);
+            List<PostPaidServerNic> listServerNic = genNicsData(subnetIDList);
+            serverBody.withNics(listServerNic);
             //setting sys volume
             int rvSize = 0;
             try {
@@ -830,12 +817,9 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             }
             PostPaidServerRootVolume rootVolumeServer = genRootVolumeData(rootVolumeType.toString(), rvSize);
             serverBody.withRootVolume(rootVolumeServer);
-            //setting server tags
-            /*List<PostPaidServerTag> postPaidServerTags = genTagsData(tags);
-            serverBody.withServerTags(postPaidServerTags);*/
             CreatePostPaidServersRequestBody body = new CreatePostPaidServersRequestBody();
             if (associateEIP) {
-                PostPaidServerPublicip publicIp = genECSIP();
+                PostPaidServerPublicip publicIp = genEcsIP();
                 serverBody.withPublicip(publicIp);
             }
             body.withDryRun(true).withServer(serverBody);

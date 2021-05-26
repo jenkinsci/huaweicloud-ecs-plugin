@@ -16,7 +16,7 @@ import java.io.IOException;
 public class ECSComputer extends SlaveComputer {
 
     /**
-     * Cached description of this EC2 instance. Lazily fetched.
+     * Cached description of this ECS instance. Lazily fetched.
      */
     private volatile ServerDetail ecsInstanceDescription;
 
@@ -59,7 +59,7 @@ public class ECSComputer extends SlaveComputer {
     }
 
     /**
-     * Obtains the instance state description in EC2.
+     * Obtains the instance state description in ECS.
      *
      * <p>
      * This method returns a cached state, so it's not suitable to check {@link ServerDetail#getStatus()} from the returned

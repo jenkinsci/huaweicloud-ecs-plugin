@@ -14,6 +14,7 @@ import io.jenkins.plugins.huaweicloud.util.VPCHelper;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
 import org.apache.commons.lang.StringUtils;
+import org.jetbrains.annotations.NotNull;
 import org.kohsuke.stapler.StaplerRequest;
 
 import java.io.IOException;
@@ -145,10 +146,9 @@ public abstract class ECSAbstractSlave extends Slave {
         }
         ECSAbstractSlave result = (ECSAbstractSlave) super.reconfigure(req, form);
         if (result != null) {
-            /* Get rid of the old tags, as represented by ourselves. */
+            //Get rid of the old tags, as represented by ourselves.
             clearLiveInstanceData();
-
-            /* Set the new tags, as represented by our successor */
+            //Set the new tags, as represented by our successor
             result.pushLiveInstanceData();
             return result;
         }
@@ -159,12 +159,6 @@ public abstract class ECSAbstractSlave extends Slave {
     public boolean isAcceptingTasks() {
         return terminateScheduled.getCount() == 0;
     }
-
-    void idleTimeOut() {
-        LOGGER.info("EC2 instance idle time expired: " + getInstanceId());
-        terminate();
-    }
-
 
     public String getRemoteAdmin() {
         if (StringUtils.isBlank(remoteAdmin)) {
@@ -215,7 +209,7 @@ public abstract class ECSAbstractSlave extends Slave {
         if (StringUtils.isEmpty(getInstanceId())) {
             return;
         }
-        ServerDetail instance = null;
+        ServerDetail instance;
         try {
             instance = VPCHelper.getInstanceWithRetry(getInstanceId(), getCloud());
         } catch (InterruptedException e) {
@@ -233,7 +227,7 @@ public abstract class ECSAbstractSlave extends Slave {
             List<ServerTag> serverTags = VPCHelper.getServerTags(getInstanceId(), getCloud());
             if (!serverTags.isEmpty()) {
                 //update tags
-                tags = new LinkedList<ECSTag>();
+                tags = new LinkedList<>();
                 for (ServerTag tag : serverTags) {
                     tags.add(new ECSTag(tag.getKey(), tag.getValue()));
                 }
@@ -245,7 +239,7 @@ public abstract class ECSAbstractSlave extends Slave {
     }
 
     protected void clearLiveInstanceData() throws SdkException {
-        ServerDetail instance = null;
+        ServerDetail instance;
         try {
             instance = VPCHelper.getInstanceWithRetry(getInstanceId(), getCloud());
         } catch (InterruptedException e) {
@@ -260,7 +254,7 @@ public abstract class ECSAbstractSlave extends Slave {
     }
 
     protected void pushLiveInstanceData() throws SdkException {
-        ServerDetail instance = null;
+        ServerDetail instance;
         try {
             instance = VPCHelper.getInstanceWithRetry(getInstanceId(), getCloud());
         } catch (InterruptedException e) {
@@ -317,13 +311,13 @@ public abstract class ECSAbstractSlave extends Slave {
 
     private void stop() {
         try {
-            VPCHelper.stopECSInstance(instanceId,getCloud());
+            VPCHelper.stopECSInstance(instanceId, getCloud());
             Computer computer = toComputer();
             if (computer != null) {
                 computer.disconnect(null);
             }
-        }catch (SdkException e){
-            LOGGER.log(Level.WARNING,"ECS instance idle time out stop and disconnected exception:"+e.getMessage());
+        } catch (SdkException e) {
+            LOGGER.log(Level.WARNING, "ECS instance idle time out stop and disconnected exception:" + e.getMessage());
         }
     }
 
@@ -340,7 +334,7 @@ public abstract class ECSAbstractSlave extends Slave {
     public static abstract class DescriptorImpl extends SlaveDescriptor {
 
         @Override
-        public abstract String getDisplayName();
+        public abstract @NotNull String getDisplayName();
 
         @Override
         public boolean isInstantiable() {
