@@ -119,7 +119,7 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
             conn.exec("mkdir -p " + tmpDir, logger);
             if (initScript != null && initScript.trim().length() > 0
                     && conn.exec("test -e ~/.hudson-run-init", logger) != 0) {
-                logInfo(computer, listener, "Executing init script");
+                logInfo(computer, listener, "Executing init script:" + initScript);
                 scp.put(initScript.getBytes("UTF-8"), "init.sh", tmpDir, "0700");
                 Session sess = conn.openSession();
                 sess.requestDumbPTY(); // so that the remote side bundles stdout

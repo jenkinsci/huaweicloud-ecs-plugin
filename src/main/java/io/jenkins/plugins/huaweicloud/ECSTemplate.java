@@ -313,21 +313,23 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
     }
 
+
     private List<ServerDetail> getInstancesByStatus(String jobID) throws SdkException {
-        int count = 0;
         List<String> serverIds = new ArrayList<>();
-        ShowJobResponse.StatusEnum status = ShowJobResponse.StatusEnum.FAIL;
         EcsClient ecsClient = parent.getEcsClient();
         ShowJobRequest request = new ShowJobRequest();
         request.withJobId(jobID);
-        do {
+        while (true) {
             serverIds.clear();
             ShowJobResponse response = ecsClient.showJob(request);
-            status = response.getStatus();
+            ShowJobResponse.StatusEnum status = response.getStatus();
             for (SubJob sj : response.getEntities().getSubJobs()) {
-                serverIds.add(sj.getJobId());
+                serverIds.add(sj.getEntities().getServerId());
             }
-            if (response.getStatus() == ShowJobResponse.StatusEnum.INIT || response.getStatus() == ShowJobResponse.StatusEnum.RUNNING) {
+            if (status == ShowJobResponse.StatusEnum.INIT || status == ShowJobResponse.StatusEnum.RUNNING) {
+                if (serverIds.size() > 0) {
+                    break;
+                }
                 try {
                     Thread.sleep(4000);
                 } catch (Exception e) {
@@ -336,11 +338,10 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             } else {
                 break;
             }
-            count++;
-        } while (count < 3);
+        }
 
         List<ServerDetail> instances = new ArrayList<>();
-        if (status == ShowJobResponse.StatusEnum.FAIL) {
+        if (serverIds.size() == 0) {
             return instances;
         }
         for (String srvId : serverIds) {
@@ -364,7 +365,6 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     private String createNewInstances(int needCreateCount) throws SdkException {
         PostPaidServer serverBody = genPostPaidServer(needCreateCount, getZone(), getFlavorID(),
                 getImgID(), parent.getVpcID(), description);
-        //TODO: setting the ssh login key name .withKeyName();
         //setting data volume
         if (isMountDV()) {
             List<PostPaidServerDataVolume> listServerDataVolumes = genDataVolume(getDvType(), getDvSize(), getMountQuantity());
@@ -441,9 +441,11 @@ public class ECSTemplate implements Describable<ECSTemplate> {
 
     private List<ECSAbstractSlave> toSlaves(List<ServerDetail> instances) throws IOException {
         try {
+            logProvisionInfo("Return instance: " + instances.size());
             List<ECSAbstractSlave> slaves = new ArrayList<>(instances.size());
             for (ServerDetail instance : instances) {
                 slaves.add(newOnDemandSlave(instance));
+
             }
             return slaves;
         } catch (Descriptor.FormException e) {
