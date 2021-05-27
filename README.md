@@ -68,7 +68,7 @@ Click Huawei VPC to enter the cloud configuration page.
 
 4. Configuration region
 
-   The region configuration is used to identify the region where the Huawei Cloud application is located. [Some regions are not supported by SDK restrictions](https://github.com/huaweicloud/huaweicloud-sdk-java-v3/blob/master/README_CN.md#32 -%E6%8C%87%E5%AE%9A-region-%E6%96%B9%E5%BC%8F-%E6%8E%A8%E8%8D%90-top). Just drop down to select an area.
+   The region configuration is used to identify the region where the Huawei Cloud application is located. [Some regions are not supported by SDK restrictions](https://github.com/huaweicloud/huaweicloud-sdk-java-v3/blob/master/README_CN.md#32-%E6%8C%87%E5%AE%9A-region-%E6%96%B9%E5%BC%8F-%E6%8E%A8%E8%8D%90-top). Just drop down to select an area.
 
 5. Configure "key Pair's Private key". Refer to [preconditions](#preconditions) to create a key pair and configuration item corresponding help for configuration.
 

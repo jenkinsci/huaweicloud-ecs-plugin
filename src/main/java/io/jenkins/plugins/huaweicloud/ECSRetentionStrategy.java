@@ -23,15 +23,10 @@ import java.util.logging.Logger;
 public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> implements ExecutorListener {
     private static final Logger LOGGER = Logger.getLogger(ECSRetentionStrategy.class.getName());
     public static final boolean DISABLED = Boolean.getBoolean(ECSRetentionStrategy.class.getName() + ".disabled");
-
     private long nextCheckAfter = -1;
     private transient Clock clock;
-
-
     private final int idleTerminationMinutes;
-
     private transient ReentrantLock checkLock;
-
     private static final int STARTUP_TIME_DEFAULT_VALUE = 30;
 
     @DataBoundConstructor
@@ -218,7 +213,7 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
                     // Computer is offline and startup time has expired
                     LOGGER.info("Startup timeout of " + computer.getName() + " after "
                             + uptime +
-                            " milliseconds (timeout: " + launchTimeout + " milliseconds), instance status: " + state.toString());
+                            " milliseconds (timeout: " + launchTimeout + " milliseconds), instance status: " + state);
                     node.launchTimeout();
                 }
                 return 1;
@@ -232,7 +227,7 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
 
                     LOGGER.info("Idle timeout of " + computer.getName() + " after "
                             + TimeUnit.MILLISECONDS.toMinutes(idleMilliseconds) +
-                            " idle minutes, instance status" + state.toString());
+                            " idle minutes, instance status" + state);
                     ECSAbstractSlave slaveNode = computer.getNode();
                     if (slaveNode != null) {
                         slaveNode.idleTimeout();
