@@ -78,7 +78,7 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
     }
 
     @Override
-    protected void launchScript(ECSComputer computer, TaskListener listener) throws SdkException, IOException, InterruptedException {
+    protected boolean launchScript(ECSComputer computer, TaskListener listener) throws SdkException, IOException, InterruptedException {
         final Connection conn;
         Connection cleanupConn = null; // java's code path analysis for final doesn't work that well.
         boolean successful = false;
@@ -105,11 +105,11 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
                 NovaKeypair key = computer.getCloud().getKeyPair();
                 if (key == null || !cleanupConn.authenticateWithPublicKey(computer.getRemoteAdmin(), key.getPrivateKey().toCharArray(), "")) {
                     logWarning(computer, listener, "Authentication failed");
-                    return; // failed to connect as root.
+                    return false; // failed to connect as root.
                 }
             } else {
                 logWarning(computer, listener, "bootstrapresult failed");
-                return; // bootstrap closed for us.
+                return false; // bootstrap closed for us.
             }
             conn = cleanupConn;
             SCPClient scp = conn.createSCPClient();
@@ -134,7 +134,7 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
                 int exitStatus = waitCompletion(sess);
                 if (exitStatus != 0) {
                     logWarning(computer, listener, "init script failed: exit code=" + exitStatus);
-                    return;
+                    return false;
                 }
                 sess.close();
 
@@ -154,11 +154,11 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
                 exitStatus = waitCompletion(sess);
                 if (exitStatus != 0) {
                     logWarning(computer, listener, "init script failed: exit code=" + exitStatus);
-                    return;
+                    return false;
                 }
                 sess.close();
             }
-            checkAndInstallJava(computer, conn, "java -fullversion",  logger, listener);
+            checkAndInstallJava(computer, conn, "java -fullversion", logger, listener);
             executeRemote(computer, conn, "which scp", "sudo yum install -y openssh-clients", logger, listener);
             // Always copy so we get the most recent slave.jar
             logInfo(computer, listener, "Copying remoting.jar to: " + tmpDir);
@@ -182,12 +182,12 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
             });
             successful = true;
         } catch (Exception e) {
-            e.printStackTrace();
-            throw e;
+            return false;
         } finally {
             if (cleanupConn != null && !successful)
                 cleanupConn.close();
         }
+        return true;
     }
 
     private boolean bootstrap(ECSComputer computer, TaskListener listener, ECSTemplate template) throws IOException,
@@ -291,7 +291,7 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
         }
     }
 
-    private String getECSHostAddress(ECSComputer computer, ECSTemplate template, boolean isPrivateIP) throws InterruptedException ,SdkException{
+    private String getECSHostAddress(ECSComputer computer, ECSTemplate template, boolean isPrivateIP) throws InterruptedException, SdkException {
         ServerDetail serverDetail = computer.updateInstanceDescription();
         List<ServerAddress> serverAddresses = serverDetail.getAddresses().get(template.getParent().getVpcID());
         String publicIP = "";

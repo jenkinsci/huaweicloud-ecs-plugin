@@ -1,6 +1,7 @@
 package io.jenkins.plugins.huaweicloud;
 
 import hudson.Extension;
+import hudson.Util;
 import hudson.model.Failure;
 import hudson.model.Label;
 import hudson.slaves.Cloud;
@@ -66,6 +67,7 @@ public class HuaweiVPC extends VPC {
         }
 
         public FormValidation doCheckCloudName(@QueryParameter String value) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
             try {
                 Jenkins.checkGoodName(value);
             } catch (Failure e) {
@@ -97,7 +99,7 @@ public class HuaweiVPC extends VPC {
             ListBoxModel model = new ListBoxModel();
             model.add(Messages.UI_NoSelect(), "");
             model.add("Africa-Johannesburg(非洲-约翰内斯堡)", "af-south-1");
-            model.add("Asia Pacific-Hong Kong(亚太-香港)", "af-south-1");
+            model.add("Asia Pacific-Hong Kong(亚太-香港)", "ap-southeast-1");
             model.add("Asia Pacific-Bangkok(亚太-曼谷)", "ap-southeast-2");
             model.add("Asia Pacific-Singapore(亚太-新加坡)", "ap-southeast-3");
             model.add("East China-Shanghai II(华东-上海二)", "cn-east-2");
@@ -112,7 +114,8 @@ public class HuaweiVPC extends VPC {
 
         @RequirePOST
         public FormValidation doTestConnection(@QueryParameter String region, @QueryParameter String credentialsId, @QueryParameter String sshKeysCredentialsId) {
-            if (StringUtils.isBlank(region) || StringUtils.isBlank(credentialsId) || StringUtils.isBlank(sshKeysCredentialsId)) {
+            if (Util.fixEmptyAndTrim(region) == null || Util.fixEmptyAndTrim(credentialsId) == null ||
+                    Util.fixEmptyAndTrim(sshKeysCredentialsId) == null) {
                 return FormValidation.error(Messages.HuaweiECSCloud_ErrorConfig());
             }
             return super.doTestConnection(region, credentialsId, sshKeysCredentialsId);

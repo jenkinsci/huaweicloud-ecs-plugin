@@ -16,6 +16,7 @@ import com.huaweicloud.sdk.eip.v2.EipClient;
 import com.huaweicloud.sdk.eip.v2.region.EipRegion;
 import com.huaweicloud.sdk.iam.v3.IamClient;
 import com.huaweicloud.sdk.iam.v3.region.IamRegion;
+import hudson.Util;
 import hudson.model.*;
 import hudson.security.ACL;
 import hudson.slaves.Cloud;
@@ -525,14 +526,16 @@ public abstract class VPC extends Cloud {
     public static abstract class DescriptorImpl extends Descriptor<Cloud> {
 
         public FormValidation doCheckCredentialsId(@QueryParameter String value) {
-            if (StringUtils.isBlank(value)) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            if (Util.fixEmptyAndTrim(value) == null) {
                 return FormValidation.error(Messages.HuaweiECSCloud_MalformedCredentials());
             }
             return FormValidation.ok();
         }
 
         public FormValidation doCheckVpcID(@QueryParameter String value) {
-            if (StringUtils.isBlank(value)) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            if (Util.fixEmptyAndTrim(value) == null) {
                 return FormValidation.error("no vpcID is specified");
             }
             int found = 0;
@@ -578,8 +581,7 @@ public abstract class VPC extends Cloud {
         @RequirePOST
         public FormValidation doCheckSshKeysCredentialsId(@QueryParameter String value) throws IOException, ServletException {
             Jenkins.get().checkPermission(Jenkins.ADMINISTER);
-
-            if (value == null || value.isEmpty()) {
+            if (Util.fixEmptyAndTrim(value) == null) {
                 return FormValidation.error("No ssh credentials selected");
             }
 

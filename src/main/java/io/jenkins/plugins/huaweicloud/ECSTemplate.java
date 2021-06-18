@@ -8,6 +8,7 @@ import hudson.RelativePath;
 import hudson.Util;
 import hudson.model.*;
 import hudson.model.labels.LabelAtom;
+import hudson.security.Permission;
 import hudson.slaves.NodeProperty;
 import hudson.slaves.NodePropertyDescriptor;
 import hudson.util.DescribableList;
@@ -21,6 +22,7 @@ import jenkins.slaves.iterators.api.NodeIterator;
 import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import java.io.IOException;
@@ -353,6 +355,11 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     }
 
     private String createNewInstances(int needCreateCount) throws SdkException {
+        //Limit the number of machines created each time prevent the failure of
+        //each creation due to insufficient resources of HUAWEI CLOUD
+        if (needCreateCount > 5) {
+            needCreateCount = 5;
+        }
         PostPaidServer serverBody = genPostPaidServer(needCreateCount, getZone(), getFlavorID(),
                 getImgID(), parent.getVpcID(), description);
         //setting data volume
@@ -615,6 +622,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
 
         public FormValidation doCheckFlavorID(@QueryParameter String flavorID) {
+            Jenkins.get().hasPermission(Jenkins.ADMINISTER);
             if (StringUtils.isBlank(flavorID)) {
                 return FormValidation.error(Messages.TPL_NoSetFlavorID());
             }
@@ -622,14 +630,15 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
 
         public FormValidation doCheckZone(@QueryParameter String zone) {
-            if (StringUtils.isBlank(zone)) {
+            Jenkins.get().hasPermission(Jenkins.ADMINISTER);
+            if (Util.fixEmptyAndTrim(zone) == null) {
                 return FormValidation.error(Messages.TPL_NoSetAZ());
             }
             return FormValidation.ok();
         }
 
         public FormValidation doCheckDvSize(@QueryParameter String dvSize) {
-            if (StringUtils.isBlank(dvSize)) {
+            if (Util.fixEmptyAndTrim(dvSize) == null) {
                 return FormValidation.error("no data volume size is specified");
             }
             try {
@@ -658,7 +667,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
 
         public FormValidation doCheckMinimumNumberOfInstances(@QueryParameter String value, @QueryParameter String instanceCapStr) {
-            if (value == null || value.trim().isEmpty())
+            if (Util.fixEmptyAndTrim(value) == null)
                 return FormValidation.ok();
             try {
                 int val = Integer.parseInt(value);
@@ -683,7 +692,8 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
 
         public FormValidation doCheckImgID(@QueryParameter String imgID) {
-            if (StringUtils.isBlank(imgID)) {
+            Jenkins.get().hasPermission(Jenkins.ADMINISTER);
+            if (Util.fixEmptyAndTrim(imgID) == null) {
                 return FormValidation.error(Messages.TPL_NoSetImageID());
             }
             return FormValidation.ok();
@@ -691,7 +701,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
 
         public FormValidation doCheckRvSizeStr(@QueryParameter String rvSizeStr) {
             LOGGER.log(Level.WARNING, rvSizeStr + "");
-            if (StringUtils.isNotEmpty(rvSizeStr) && StringUtils.isNotBlank(rvSizeStr)) {
+            if (Util.fixEmptyAndTrim(rvSizeStr) != null) {
                 try {
                     int size = Integer.parseInt(rvSizeStr);
                     if (size < 0 || size > 1024) {
@@ -707,7 +717,8 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
 
         public FormValidation doCheckSubnetIDs(@QueryParameter String subnetIDs) {
-            if (StringUtils.isBlank(subnetIDs)) {
+            Jenkins.get().hasPermission(Jenkins.ADMINISTER);
+            if (Util.fixEmptyAndTrim(subnetIDs) == null) {
                 return FormValidation.error("no subnetIDs is specified");
             }
             return FormValidation.ok();
@@ -726,6 +737,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         @RequirePOST
         public ListBoxModel doFillZoneItems(@QueryParameter String zone, @RelativePath("..") @QueryParameter String region,
                                             @RelativePath("..") @QueryParameter String credentialsId) {
+            checkPermission(VPC.PROVISION);
             ListBoxModel model = new ListBoxModel();
             if (StringUtils.isBlank(zone)) {
                 model.add(new ListBoxModel.Option(Messages.UI_NoSelect(), "", true));
@@ -777,6 +789,15 @@ public class ECSTemplate implements Describable<ECSTemplate> {
                     .collect(Collectors.toCollection(ListBoxModel::new));
         }
 
+        private void checkPermission(Permission p) {
+            final VPC ancestorObject = Stapler.getCurrentRequest().findAncestorObject(VPC.class);
+            if (ancestorObject != null) {
+                ancestorObject.checkPermission(p);
+            } else {
+                Jenkins.get().checkPermission(p);
+            }
+        }
+
         @RequirePOST
         public FormValidation doTestCreateEcs(@QueryParameter String region, @QueryParameter String credentialsId,
                                               @QueryParameter String description, @QueryParameter String imgID,
@@ -786,7 +807,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
                                               @QueryParameter boolean associateEIP, @QueryParameter String subnetIDs,
                                               @QueryParameter String dvSize, @QueryParameter String mountQuantity,
                                               @QueryParameter boolean mountDV) {
-
+            checkPermission(VPC.PROVISION);
             if (StringUtils.isEmpty(region) || StringUtils.isEmpty(credentialsId) || StringUtils.isEmpty(imgID) ||
                     StringUtils.isEmpty(flavorID) || StringUtils.isEmpty(zone)) {
                 return FormValidation.error(Messages.HuaweiECSCloud_ErrorConfig());

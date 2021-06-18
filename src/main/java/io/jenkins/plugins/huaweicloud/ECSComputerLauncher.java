@@ -14,33 +14,35 @@ public abstract class ECSComputerLauncher extends ComputerLauncher {
 
     @Override
     public void launch(SlaveComputer slaveComputer, TaskListener listener) {
+        //when launch fail delete the ecs instance and  avoid repeated creation of offline nodes
         try {
             ECSComputer computer = (ECSComputer) slaveComputer;
-            launchScript(computer, listener);
-        } catch (SdkException | IOException e) {
-            if (slaveComputer.getNode() instanceof ECSAbstractSlave) {
-                LOGGER.log(Level.FINE, String.format("Terminating the ecs agent %s due a problem launching or connecting to it", slaveComputer.getName()), e);
-                ECSAbstractSlave ec2AbstractSlave = (ECSAbstractSlave) slaveComputer.getNode();
-                if (ec2AbstractSlave != null) {
-                    ec2AbstractSlave.terminate();
-                }
+            if (!launchScript(computer, listener)) {
+                shutdownInstance(slaveComputer);
             }
+        } catch (SdkException | IOException e) {
+            LOGGER.log(Level.FINE, String.format("Terminating the ecs agent %s due a problem launching or connecting to it", slaveComputer.getName()), e);
+            shutdownInstance(slaveComputer);
             e.printStackTrace(listener.error(e.getMessage()));
         } catch (InterruptedException e) {
+            LOGGER.log(Level.FINE, String.format("Terminating the ecs agent %s due a problem launching or connecting to it", slaveComputer.getName()), e);
             Thread.currentThread().interrupt();
+            shutdownInstance(slaveComputer);
             e.printStackTrace(listener.error(e.getMessage()));
-            if (slaveComputer.getNode() instanceof ECSAbstractSlave) {
-                LOGGER.log(Level.FINE, String.format("Terminating the ecs agent %s due a problem launching or connecting to it", slaveComputer.getName()), e);
-                ECSAbstractSlave ec2AbstractSlave = (ECSAbstractSlave) slaveComputer.getNode();
-                if (ec2AbstractSlave != null) {
-                    ec2AbstractSlave.terminate();
-                }
+        }
+    }
+
+    private void shutdownInstance(SlaveComputer slaveComputer) {
+        if (slaveComputer.getNode() instanceof ECSAbstractSlave) {
+            ECSAbstractSlave ec2AbstractSlave = (ECSAbstractSlave) slaveComputer.getNode();
+            if (ec2AbstractSlave != null) {
+                ec2AbstractSlave.terminate();
             }
         }
     }
 
     // Stage 2 of the launch. Called after the ECS instance comes up.
-    protected abstract void launchScript(ECSComputer computer, TaskListener listener)
+    protected abstract boolean launchScript(ECSComputer computer, TaskListener listener)
             throws SdkException, IOException, InterruptedException;
 
 }
