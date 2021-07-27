@@ -127,9 +127,13 @@ public class VPCHelper {
             request.withLimit(limit).withOffset(offset);
             try {
                 ListServersDetailsResponse response = ecsClient.listServersDetails(request);
-                currentSize = response.getCount();
-                instances.addAll(Objects.requireNonNull(filterDeleteInstance(response.getServers())));
-                offset++;
+                if (response.getServers() != null) {
+                    currentSize = response.getServers().size();
+                    instances.addAll(Objects.requireNonNull(filterDeleteInstance(response.getServers())));
+                    offset++;
+                } else {
+                    break;
+                }
             } catch (SdkException e) {
                 e.printStackTrace();
                 break;
@@ -149,9 +153,13 @@ public class VPCHelper {
             request.withLimit(limit).withOffset(offset).withFlavor(template.getFlavorID()).withName(ECSTemplate.srvNamePrefix);
             try {
                 ListServersDetailsResponse response = ecsClient.listServersDetails(request);
-                currentSize = response.getCount();
-                instances.addAll(filterInstance(response.getServers(), template));
-                offset++;
+                if (response.getServers() != null) {
+                    currentSize = response.getServers().size();
+                    instances.addAll(filterInstance(response.getServers(), template));
+                    offset++;
+                } else {
+                    break;
+                }
             } catch (SdkException e) {
                 e.printStackTrace();
                 break;
