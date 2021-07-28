@@ -534,7 +534,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     private static PostPaidServer genPostPaidServer(int needCreateCount, String zone, String flavorID, String imgID,
                                                     String vpcId, String description) {
         PostPaidServer serverBody = new PostPaidServer();
-        String name = srvNamePrefix + getUUID8();
+        String name = VPCHelper.genSlaveNamePrefix(description, flavorID, imgID) + getUUID8();
         serverBody.withAvailabilityZone(zone)
                 .withCount(needCreateCount)
                 .withFlavorRef(flavorID)

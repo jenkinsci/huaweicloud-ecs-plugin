@@ -12,6 +12,8 @@ import io.jenkins.plugins.huaweicloud.VPC;
 import org.apache.commons.codec.binary.Hex;
 
 import javax.annotation.Nonnull;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -201,4 +203,32 @@ public class VPCHelper {
     }
 
 
+    public static String genSlaveNamePrefix(String description, String flavorId, String imageID) {
+        String nameStr = MD516bitUp(description + flavorId + imageID);
+        return ECSTemplate.srvNamePrefix + nameStr;
+    }
+
+    public static String MD516bitUp(String readyEncryptStr) {
+        try {
+            if (readyEncryptStr != null) {
+                MessageDigest md = MessageDigest.getInstance("MD5");
+                md.update(readyEncryptStr.getBytes());
+                byte[] b = md.digest();
+                StringBuilder su = new StringBuilder();
+                for (byte value : b) {
+                    String haxHex = Integer.toHexString(value & 0xFF);
+                    if (haxHex.length() < 2) {
+                        su.append("0");
+                    }
+                    su.append(haxHex);
+                }
+                return su.substring(8, 24).toUpperCase();
+            } else {
+                return "";
+            }
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            return "";
+        }
+    }
 }
