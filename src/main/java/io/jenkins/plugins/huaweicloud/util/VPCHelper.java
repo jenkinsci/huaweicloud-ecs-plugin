@@ -9,9 +9,8 @@ import com.huaweicloud.sdk.eip.v2.model.ShowPublicipRequest;
 import com.huaweicloud.sdk.eip.v2.model.ShowPublicipResponse;
 import io.jenkins.plugins.huaweicloud.ECSTemplate;
 import io.jenkins.plugins.huaweicloud.VPC;
-import org.apache.commons.codec.binary.Hex;
 
-import javax.annotation.Nonnull;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
@@ -212,7 +211,7 @@ public class VPCHelper {
         try {
             if (readyEncryptStr != null) {
                 MessageDigest md = MessageDigest.getInstance("MD5");
-                md.update(readyEncryptStr.getBytes());
+                md.update(readyEncryptStr.getBytes(StandardCharsets.UTF_8));
                 byte[] b = md.digest();
                 StringBuilder su = new StringBuilder();
                 for (byte value : b) {
