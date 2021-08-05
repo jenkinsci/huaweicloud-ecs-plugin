@@ -174,7 +174,7 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
         if (slaveTemplate != null) {
             long numberOfCurrentInstancesForTemplate = MinimumInstanceChecker.countCurrentNumberOfAgents(slaveTemplate);
             if (numberOfCurrentInstancesForTemplate > 0 && numberOfCurrentInstancesForTemplate <= slaveTemplate.getMinimumNumberOfInstances()) {
-               // TODO:Check if we're in an active time-range for keeping minimum number of instances
+                // TODO:Check if we're in an active time-range for keeping minimum number of instances
                 return 1;
             }
         }
@@ -232,20 +232,20 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
                     if (slaveNode != null) {
                         slaveNode.idleTimeout();
                     }
-                } else {
-                    //TODO: think about that this is useful to huawei cloud
-                    final int oneHourSeconds = (int) TimeUnit.SECONDS.convert(1, TimeUnit.HOURS);
-                    final int freeSecondsLeft = oneHourSeconds
-                            - (int) (TimeUnit.SECONDS.convert(uptime, TimeUnit.MILLISECONDS) % oneHourSeconds);
-                    if (freeSecondsLeft <= TimeUnit.MINUTES.toSeconds(Math.abs(idleTerminationMinutes))) {
-                        LOGGER.info("Idle timeout of " + computer.getName() + " after "
-                                + TimeUnit.MILLISECONDS.toMinutes(idleMilliseconds) + " idle minutes, with "
-                                + TimeUnit.SECONDS.toMinutes(freeSecondsLeft)
-                                + " minutes remaining in billing period");
-                        ECSAbstractSlave slaveNode = computer.getNode();
-                        if (slaveNode != null) {
-                            slaveNode.idleTimeout();
-                        }
+                }
+            } else {
+                //TODO: think about that this is useful to huawei cloud
+                final int oneHourSeconds = (int) TimeUnit.SECONDS.convert(1, TimeUnit.HOURS);
+                final int freeSecondsLeft = oneHourSeconds
+                        - (int) (TimeUnit.SECONDS.convert(uptime, TimeUnit.MILLISECONDS) % oneHourSeconds);
+                if (freeSecondsLeft <= TimeUnit.MINUTES.toSeconds(Math.abs(idleTerminationMinutes))) {
+                    LOGGER.info("Idle timeout of " + computer.getName() + " after "
+                            + TimeUnit.MILLISECONDS.toMinutes(idleMilliseconds) + " idle minutes, with "
+                            + TimeUnit.SECONDS.toMinutes(freeSecondsLeft)
+                            + " minutes remaining in billing period");
+                    ECSAbstractSlave slaveNode = computer.getNode();
+                    if (slaveNode != null) {
+                        slaveNode.idleTimeout();
                     }
                 }
             }
