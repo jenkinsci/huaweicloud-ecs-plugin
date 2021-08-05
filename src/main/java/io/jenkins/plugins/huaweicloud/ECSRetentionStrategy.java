@@ -174,7 +174,7 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
         if (slaveTemplate != null) {
             long numberOfCurrentInstancesForTemplate = MinimumInstanceChecker.countCurrentNumberOfAgents(slaveTemplate);
             if (numberOfCurrentInstancesForTemplate > 0 && numberOfCurrentInstancesForTemplate <= slaveTemplate.getMinimumNumberOfInstances()) {
-               // TODO:Check if we're in an active time-range for keeping minimum number of instances
+                // TODO:Check if we're in an active time-range for keeping minimum number of instances
                 return 1;
             }
         }
