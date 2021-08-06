@@ -28,7 +28,7 @@ Before you start to use it, you should have the following conditions:
 
    ![AK&SK](doc/HWC_plugin_AK_SK_en.png)
 
-3. Create a key pair to establish an SSH connection
+3. Create a key pair to establish an SSH connection(If the ssh key is already configured in the system image, you can ignore this step)
 
  ![AK&SK](doc/HWC_plugin_key_pair_en.png)
 
@@ -144,7 +144,7 @@ Non-required items, configure according to instructions and business scenarios.
 - Instance Cap: the maximum number of Jenkins Agents (ECS) that can be created using the modified template. Suppose this is set to 5 and the number of currently running agents is 5. When Jenkins is overloaded, no new instances and agents will be created, and jenkins tasks will be queued.
 - Stop connection when idle: When this option is selected, when the node is idle for a timeout, the ECS instance will be shut down and the agent node connection will be disconnected. When a new agent is required for the next overload, perform a boot operation on the shutdown instance and reconnect. "**Note: Shutdown will not completely end billing. Cloud hard drives and flexible public network services will be billed on demand.**"
 - Minimum number of instances: The idle timeout check will only be performed when the number of instances exceeds this number.
-
+- The remote user is the root user and the associated Huawei key pair is selected. The system image does not need to set the ssh key; otherwise, you need to ensure that the specified remote user exists in the system image and the ssh key is configured.
 
 
 #### Step Five: Save and execute the build
