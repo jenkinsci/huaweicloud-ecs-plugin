@@ -53,7 +53,7 @@
 
 2. 配置私有云ID 
 
-   需指定在华为云以创建的虚拟私有云（VPC）ID,如没有VPC，需在阿里云控制台创建VPC。
+   需指定在华为云以创建的虚拟私有云（VPC）ID,如没有VPC，需在华为云控制台创建VPC。
 
    ![gen_VPC](doc/HWC_plugin_gen_VPC.png)
 

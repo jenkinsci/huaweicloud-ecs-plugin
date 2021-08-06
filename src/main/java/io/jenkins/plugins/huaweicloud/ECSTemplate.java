@@ -409,14 +409,16 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
 
         //setting key name
-        try {
-            NovaKeypair keyPair = this.getParent().getKeyPair();
-            if (keyPair != null) {
-                String name = keyPair.getName();
-                serverBody.withKeyName(name);
+        if (getParent().isAssociateHWCKeypair()) {
+            try {
+                NovaKeypair keyPair = getParent().getKeyPair();
+                if (keyPair != null) {
+                    String name = keyPair.getName();
+                    serverBody.withKeyName(name);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
 
         //set user data
