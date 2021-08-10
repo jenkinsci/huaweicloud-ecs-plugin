@@ -1,5 +1,6 @@
 package io.jenkins.plugins.huaweicloud;
 
+import com.cloudbees.jenkins.plugins.sshcredentials.SSHUserPrivateKey;
 import com.huaweicloud.sdk.core.exception.SdkException;
 import com.huaweicloud.sdk.ecs.v2.EcsClient;
 import com.huaweicloud.sdk.ecs.v2.model.*;
@@ -22,25 +23,28 @@ import java.util.logging.Logger;
 public class ECSPrivateKey {
     private static final Logger LOGGER = Logger.getLogger(ECSPrivateKey.class.getName());
 
-    private final Secret privateKey;
+    private final SSHUserPrivateKey privateKey;
     private final EcsClient client;
-    private final String SSHKeyId;
+    private final boolean associateHWCKeypair;
 
-    public ECSPrivateKey(String privateKey, String SSHKeyId, EcsClient client) {
-        this.privateKey = Secret.fromString(privateKey.trim());
-        ;
+    public ECSPrivateKey(SSHUserPrivateKey privateKey, boolean associateHWCKeypair, EcsClient client) {
+        this.privateKey = privateKey;
         this.client = client;
-        this.SSHKeyId = SSHKeyId;
+        this.associateHWCKeypair = associateHWCKeypair;
     }
 
-    public String getPrivateKey() {
-        return privateKey.getPlainText();
+    public String getPrivateKeyContent() {
+        return getPrivateKeySecret().getPlainText();
+    }
+
+    public String getPrivateKeyId() {
+        return privateKey.getId();
     }
 
     @SuppressWarnings("unused") // used by config-entries.jelly
     @Restricted(NoExternalUse.class)
     public Secret getPrivateKeySecret() {
-        return privateKey;
+        return Secret.fromString(privateKey.getPrivateKey().trim());
     }
 
     /**
@@ -50,7 +54,7 @@ public class ECSPrivateKey {
      *                     (password protected private keys are not yet supported)
      */
     public String getFingerprint() throws IOException {
-        String pemData = privateKey.getPlainText();
+        String pemData = getPrivateKeyContent();
         if (pemData.isEmpty()) {
             throw new IOException("This private key cannot be empty");
         }
@@ -63,7 +67,7 @@ public class ECSPrivateKey {
 
     public String getPublicFingerprint() throws IOException {
         try {
-            PEMEncodable decode = PEMEncodable.decode(privateKey.getPlainText());
+            PEMEncodable decode = PEMEncodable.decode(getPrivateKeyContent());
             KeyPair keyPair = decode.toKeyPair();
             if (keyPair == null) {
                 throw new UnrecoverableKeyException("private key is null");
@@ -78,7 +82,7 @@ public class ECSPrivateKey {
      * Is this file really a private key?
      */
     public boolean isPrivateKey() throws IOException {
-        BufferedReader br = new BufferedReader(new StringReader(privateKey.getPlainText()));
+        BufferedReader br = new BufferedReader(new StringReader(getPrivateKeyContent()));
         String line;
         while ((line = br.readLine()) != null) {
             if (line.equals("-----BEGIN RSA PRIVATE KEY-----"))
@@ -101,18 +105,26 @@ public class ECSPrivateKey {
 
     @Override
     public String toString() {
-        return privateKey.getPlainText();
+        return getPrivateKeyContent();
     }
 
 
     public NovaKeypair find() throws SdkException, IOException {
         String pfp = getPublicFingerprint();
         NovaKeypair keypair = new NovaKeypair();
+        if (!associateHWCKeypair) {
+            keypair.withFingerprint(pfp)
+                    .withName(privateKey.getId())
+                    .withPrivateKey(getPrivateKeyContent())
+                    .withUserId(privateKey.getUsername());
+            return keypair;
+        }
+
         try {
             NovaKeypairDetail kd = getKeypairDetailById();
             if (kd != null && kd.getFingerprint().equalsIgnoreCase(pfp)) {
                 keypair.withFingerprint(kd.getFingerprint()).withName(kd.getName())
-                        .withPrivateKey(this.getPrivateKey()).withPublicKey(kd.getPublicKey())
+                        .withPrivateKey(getPrivateKeyContent()).withPublicKey(kd.getPublicKey())
                         .withUserId(kd.getUserId()).withType(kd.getType());
                 return keypair;
             }
@@ -124,7 +136,7 @@ public class ECSPrivateKey {
             NovaSimpleKeypair kp = rs.getKeypair();
             if (kp != null && kp.getFingerprint().equalsIgnoreCase(pfp)) {
                 keypair.withFingerprint(kp.getFingerprint()).withName(kp.getName())
-                        .withPrivateKey(this.getPrivateKey()).withPublicKey(kp.getPublicKey())
+                        .withPrivateKey(getPrivateKeyContent()).withPublicKey(kp.getPublicKey())
                         .withType(kp.getType());
                 return keypair;
             }
@@ -134,11 +146,11 @@ public class ECSPrivateKey {
 
 
     private NovaKeypairDetail getKeypairDetailById() throws SdkException {
-        if (StringUtils.isEmpty(SSHKeyId)) {
+        if (StringUtils.isEmpty(getPrivateKeyId())) {
             throw new SdkException("keypair name is empty");
         }
         NovaShowKeypairRequest request = new NovaShowKeypairRequest();
-        request.withKeypairName(SSHKeyId);
+        request.withKeypairName(getPrivateKeyId());
         NovaShowKeypairResponse response = client.novaShowKeypair(request);
         return response.getKeypair();
     }
