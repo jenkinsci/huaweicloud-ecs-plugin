@@ -27,7 +27,7 @@ public class VPCHelper {
     public static final String INSTANCE_STATE_SOFT_DEL = "SOFT_DELETED";
     public static final String INSTANCE_STATE_SHUTOFF = "SHUTOFF";
     public static final String INSTANCE_STATE_ERROR = "ERROR";
-
+    public static final String INSTANCE_STATE_ACTIVE = "ACTIVE";
 
     public static ServerDetail getInstanceWithRetry(String instanceId, VPC vpc) throws SdkException, InterruptedException {
         for (int i = 0; i < 5; i++) {
@@ -234,9 +234,16 @@ public class VPCHelper {
 
 
     public static boolean isTerminated(String state) {
-        return "DELETED".equals(state) || "SOFT_DELETED".equals(state);
+        return INSTANCE_STATE_DEL.equals(state) || INSTANCE_STATE_SOFT_DEL.equals(state) || INSTANCE_STATE_ERROR.equals(state);
     }
 
+    public static boolean isRunning(String state) {
+        return INSTANCE_STATE_ACTIVE.equals(state);
+    }
+
+    public static boolean isShutdown(String state) {
+        return INSTANCE_STATE_SHUTOFF.equals(state);
+    }
 
     public static String genSlaveNamePrefix(String description, String flavorId) {
         String nameStr = MD516bitUp(description + flavorId);

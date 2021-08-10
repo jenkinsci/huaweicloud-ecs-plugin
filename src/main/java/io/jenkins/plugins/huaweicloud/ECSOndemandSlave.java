@@ -28,11 +28,12 @@ public class ECSOndemandSlave extends ECSAbstractSlave {
                             int numExecutors, String labelString, Mode mode,
                             String remoteFS, List<? extends NodeProperty<?>> nodeProperties, String remoteAdmin,
                             String idleTerminationMinutes, List<ECSTag> tags, String cloudName, int launchTimeout,
-                            String initScript, String tmpDir,boolean stopOnTerminate) throws Descriptor.FormException, IOException {
+                            String initScript, String tmpDir, boolean stopOnTerminate, String offlineTimeout) throws Descriptor.FormException, IOException {
         super(name, instanceId, templateDescription, remoteFS,
                 numExecutors, mode, labelString, nodeProperties,
                 remoteAdmin, tags, cloudName, idleTerminationMinutes,
-                new ECSUnixLauncher(), launchTimeout, initScript, tmpDir,new ECSRetentionStrategy(idleTerminationMinutes),stopOnTerminate);
+                new ECSUnixLauncher(), launchTimeout, initScript, tmpDir,
+                new ECSRetentionStrategy(idleTerminationMinutes), stopOnTerminate, offlineTimeout);
     }
 
 
