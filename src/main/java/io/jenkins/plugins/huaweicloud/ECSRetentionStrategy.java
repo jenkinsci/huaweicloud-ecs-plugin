@@ -190,7 +190,7 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
                         + ", will retry next check. Exception: " + e);
                 return 1;
             }
-            if (VPCHelper.isTerminated(state) || (slaveTemplate != null && slaveTemplate.stopOnTerminate) && "SHUTOFF".equals(state)) {
+            if (VPCHelper.isTerminated(state) || (slaveTemplate != null && slaveTemplate.stopOnTerminate) && VPCHelper.isShutdown(state)) {
                 if (computer.isOnline()) {
                     computer.disconnect(null);
                 }

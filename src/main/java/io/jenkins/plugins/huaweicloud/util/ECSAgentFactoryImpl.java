@@ -12,6 +12,7 @@ public class ECSAgentFactoryImpl implements ECSAgentFactory {
     public ECSOndemandSlave createOnDemandAgent(ECSAgentConfig.OnDemand config) throws Descriptor.FormException, IOException {
         return new ECSOndemandSlave(config.name, config.instanceId, config.description, config.numExecutors,
                 config.labelString, config.mode, config.remoteFS, config.nodeProperties, config.remoteAdmin,
-                config.idleTerminationMinutes, config.tags, config.cloudName, config.launchTimeout, config.initScript, config.tmpDir, config.stopOnTerminate);
+                config.idleTerminationMinutes, config.tags, config.cloudName, config.launchTimeout, config.initScript,
+                config.tmpDir, config.stopOnTerminate, config.offlineTimeout);
     }
 }
