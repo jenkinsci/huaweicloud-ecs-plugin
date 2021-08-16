@@ -311,32 +311,35 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         List<String> serverIds = new ArrayList<>();
         EcsClient ecsClient = parent.getEcsClient();
         ShowJobRequest request = new ShowJobRequest();
+        int retryNum = 0;
+        int sleepTime = 2000;
         request.withJobId(jobID);
-        while (true) {
+        while (retryNum < 10) {
             ShowJobResponse response = ecsClient.showJob(request);
             ShowJobResponse.StatusEnum status = response.getStatus();
-            for (SubJob sj : response.getEntities().getSubJobs()) {
-                serverIds.add(sj.getEntities().getServerId());
+            if (response.getEntities() != null && response.getEntities().getSubJobs() != null) {
+                for (SubJob sj : response.getEntities().getSubJobs()) {
+                    serverIds.add(sj.getEntities().getServerId());
+                }
             }
-            if (status == ShowJobResponse.StatusEnum.INIT || status == ShowJobResponse.StatusEnum.RUNNING) {
-                if (serverIds.size() > 0) {
-                    break;
-                }
-                try {
-                    Thread.sleep(4000);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            } else {
+            if (serverIds.size() > 0 || status == ShowJobResponse.StatusEnum.FAIL || status == ShowJobResponse.StatusEnum.SUCCESS) {
                 break;
             }
+            try {
+                Thread.sleep(sleepTime);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            retryNum++;
+            sleepTime += 1000 * retryNum;
         }
 
         List<ServerDetail> instances = new ArrayList<>();
         if (serverIds.size() == 0) {
             return instances;
         }
-        for (String srvId : serverIds) {
+        for (
+                String srvId : serverIds) {
             try {
                 ServerDetail sd = getServerDetail(srvId);
                 instances.add(sd);
@@ -859,6 +862,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
                 return FormValidation.error(e.getMessage());
             }
         }
+
     }
 
     private static String getUUID8() {

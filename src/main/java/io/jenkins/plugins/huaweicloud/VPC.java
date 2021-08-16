@@ -437,7 +437,7 @@ public abstract class VPC extends Cloud {
 
     private int getPossibleNewSlavesCount(ECSTemplate t) {
         List<ServerDetail> allInstances = VPCHelper.getAllOfServerList(this);
-        List<ServerDetail> tmpInstance = VPCHelper.getAllOfServerByTmp(t);
+        List<ServerDetail> tmpInstance = VPCHelper.getAllOfAvailableServerByTmp(t);
         int availableTotalSlave = instanceCap - allInstances.size();
         int availableTmpSlave = t.getInstanceCap() - tmpInstance.size();
         LOGGER.log(Level.FINE, "Available Total Slaves: " + availableTotalSlave + " Available AMI slaves: " + availableTmpSlave
