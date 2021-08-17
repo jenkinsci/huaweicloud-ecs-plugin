@@ -436,8 +436,8 @@ public abstract class VPC extends Cloud {
     }
 
     private int getPossibleNewSlavesCount(ECSTemplate t) {
-        List<ServerDetail> allInstances = VPCHelper.getAllOfServerList(this);
-        List<ServerDetail> tmpInstance = VPCHelper.getAllOfServerByTmp(t);
+        List<ServerDetail> allInstances =  VPCHelper.filterAvailableServers(VPCHelper.getAllOfServerList(this));
+        List<ServerDetail> tmpInstance = VPCHelper.filterAvailableServers(VPCHelper.getAllOfServerByTmp(t));
         int availableTotalSlave = instanceCap - allInstances.size();
         int availableTmpSlave = t.getInstanceCap() - tmpInstance.size();
         LOGGER.log(Level.FINE, "Available Total Slaves: " + availableTotalSlave + " Available AMI slaves: " + availableTmpSlave
@@ -509,7 +509,7 @@ public abstract class VPC extends Cloud {
         ICredential auth = createBasicCredential(credentialsId);
         return EipClient.newBuilder()
                 .withCredential(auth)
-                .withRegion(EipRegion.valueOf("cn-south-1"))
+                .withRegion(EipRegion.valueOf(region))
                 .build();
     }
 

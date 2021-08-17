@@ -19,6 +19,11 @@ import java.util.logging.Logger;
 
 public class VPCHelper {
     private static final Logger LOGGER = Logger.getLogger(VPCHelper.class.getName());
+    public static final String INSTANCE_STATE_DEL = "DELETED";
+    public static final String INSTANCE_STATE_SOFT_DEL = "SOFT_DELETED";
+    public static final String INSTANCE_STATE_SHUTOFF = "SHUTOFF";
+    public static final String INSTANCE_STATE_ERROR = "ERROR";
+
 
     public static ServerDetail getInstanceWithRetry(String instanceId, VPC vpc) throws SdkException, InterruptedException {
         for (int i = 0; i < 5; i++) {
@@ -167,6 +172,19 @@ public class VPCHelper {
             }
         } while (limit == currentSize);
         return instances;
+    }
+
+    public static List<ServerDetail> filterAvailableServers( List<ServerDetail> allOfServerByTmp) {
+        List<ServerDetail> servers = new ArrayList<>();
+        for (ServerDetail detail : allOfServerByTmp) {
+            String curStatus = detail.getStatus();
+            if (INSTANCE_STATE_SHUTOFF.equals(curStatus) || INSTANCE_STATE_ERROR.equals(curStatus)
+                    || INSTANCE_STATE_DEL.equals(curStatus) || INSTANCE_STATE_SOFT_DEL.equals(curStatus)) {
+                continue;
+            }
+            servers.add(detail);
+        }
+        return servers;
     }
 
     private static List<ServerDetail> filterInstance(List<ServerDetail> tplAllInstance, ECSTemplate template) {
