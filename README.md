@@ -82,35 +82,45 @@ This configuration item is used to configure the relevant attributes of the jenk
 
 ![add ECS TMP](doc/HWC_plugin_add_ecs_tmp_en.png)
 
-1. Configure the mirror ID
+1. Configuration template description
+   
+   The template description cannot be empty, and the template description must be unique under the same VPC.
+   
+2. Configure the mirror ID (currently only supports Linux system)
+   
+   - Static configuration way: select Linux system image on HUAWEI CLOUD
+     
+     Choose Linux system mirroring on HUAWEI CLOUD .
 
-   Choose Linux system mirroring on HUAWEI CLOUD (currently only supports Linux system).
+     ![image](doc/HWC_plugin_image_en.png)
+   
+   - Dynamic way: Select the private image with a specific label to be used in HUAWEI CLOUD and set the label of the image. The plug-in will dynamically use the image with the label and the latest creation time.
 
-   ![image](doc/HWC_plugin_image_en.png)
+   **Note: After modifying the image configuration, please click the "apply" button to save the current changes and then click the "DRY RUN NEW ECS" button to test whether the configuration can normally create ECS on HUAWEI CLOUD.**
 
-2. Configure Flavor ID
+3. Configure Flavor ID
 
    Please refer to the "Instance Type and Specifications" section of ["Elastic Cloud Server Product Introduction"](https://support.huaweicloud.com/ecs/index.html) to select the required specifications. Example: s6.small.1.
 
-3. Configure the available partition, drop down and select the corresponding AZ.
+4. Configure the available partition, drop down and select the corresponding AZ.
 
-4. Configure the node label. When Usage selects "only build jobs with label expressions matching this node", please set a label to identify the node.
+5. Configure the node label. When Usage selects "only build jobs with label expressions matching this node", please set a label to identify the node.
 
-5. Configure the system disk type.
+6. Configure the system disk type.
 
-6. Set subnet ID
+7. Set subnet ID
 
    The subnet ID must be VPC ID corresponding to the network ID created under the VPC, in UUID format; if you need to configure multiple subnet IDs, separate them with spaces.
 
-7. Associate ECS public network IP
+8. Associate ECS public network IP
 
    Whether to create an elastic public network IP when creating an ECS instance and associate it with the instance. When selected, an elastic public network billed by traffic will be created.
 
-8. Set idle timeout termination
+9. Set idle timeout termination
 
    Set the time that the node is allowed to be idle, in minutes. When the idle time exceeds this time, the node will be released and the ECS instance will be deleted.
 
-9. Set up initialization script (optional)
+10. Set up initialization script (optional)
 
    The initialization script is a shell script that runs on the newly started follower node instance before Jenkins starts to start the follower node. This is also a good place to install other packages needed for building and testing.
 

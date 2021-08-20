@@ -7,8 +7,12 @@ import com.huaweicloud.sdk.eip.v2.EipClient;
 import com.huaweicloud.sdk.eip.v2.model.PublicipShowResp;
 import com.huaweicloud.sdk.eip.v2.model.ShowPublicipRequest;
 import com.huaweicloud.sdk.eip.v2.model.ShowPublicipResponse;
+import com.huaweicloud.sdk.ims.v2.ImsClient;
+import com.huaweicloud.sdk.ims.v2.model.ListImagesRequest;
+import com.huaweicloud.sdk.ims.v2.model.ListImagesResponse;
 import io.jenkins.plugins.huaweicloud.ECSTemplate;
 import io.jenkins.plugins.huaweicloud.VPC;
+import org.apache.commons.lang.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -19,6 +23,11 @@ import java.util.logging.Logger;
 
 public class VPCHelper {
     private static final Logger LOGGER = Logger.getLogger(VPCHelper.class.getName());
+    public static final String INSTANCE_STATE_DEL = "DELETED";
+    public static final String INSTANCE_STATE_SOFT_DEL = "SOFT_DELETED";
+    public static final String INSTANCE_STATE_SHUTOFF = "SHUTOFF";
+    public static final String INSTANCE_STATE_ERROR = "ERROR";
+
 
     public static ServerDetail getInstanceWithRetry(String instanceId, VPC vpc) throws SdkException, InterruptedException {
         for (int i = 0; i < 5; i++) {
@@ -169,13 +178,24 @@ public class VPCHelper {
         return instances;
     }
 
+    public static List<ServerDetail> getAllOfAvailableServerByTmp(ECSTemplate template) {
+        List<ServerDetail> servers = new ArrayList<>();
+        List<ServerDetail> allOfServerByTmp = getAllOfServerByTmp(template);
+        for (ServerDetail detail : allOfServerByTmp) {
+            String curStatus = detail.getStatus();
+            if (INSTANCE_STATE_SHUTOFF.equals(curStatus) || INSTANCE_STATE_ERROR.equals(curStatus)
+                    || INSTANCE_STATE_DEL.equals(curStatus) || INSTANCE_STATE_SOFT_DEL.equals(curStatus)) {
+                continue;
+            }
+            servers.add(detail);
+        }
+        return servers;
+    }
+
     private static List<ServerDetail> filterInstance(List<ServerDetail> tplAllInstance, ECSTemplate template) {
         List<ServerDetail> filterInstance = new ArrayList<>();
         for (ServerDetail server : tplAllInstance) {
             if (VPCHelper.isTerminated(server.getStatus())) {
-                continue;
-            }
-            if (!server.getImage().getId().equals(template.getImgID())) {
                 continue;
             }
             if (!template.description.equals(server.getDescription())) {
@@ -196,14 +216,30 @@ public class VPCHelper {
         return sds;
     }
 
+    public static String getImageIDByTag(ImsClient client, String tag) throws SdkException {
+        String imgID = "";
+        ListImagesRequest request = new ListImagesRequest();
+        request.withImagetype(ListImagesRequest.ImagetypeEnum.fromValue("private"));
+        request.withOsType(ListImagesRequest.OsTypeEnum.fromValue("Linux"));
+        if(StringUtils.isNotEmpty(tag)) {
+            request.withTag(tag);
+        }
+        request.withStatus(ListImagesRequest.StatusEnum.fromValue("active"));
+        ListImagesResponse response = client.listImages(request);
+        if (response != null && response.getImages() != null && response.getImages().size() > 0) {
+            imgID = response.getImages().get(0).getId();
+        }
+        return imgID;
+    }
+
 
     public static boolean isTerminated(String state) {
         return "DELETED".equals(state) || "SOFT_DELETED".equals(state);
     }
 
 
-    public static String genSlaveNamePrefix(String description, String flavorId, String imageID) {
-        String nameStr = MD516bitUp(description + flavorId + imageID);
+    public static String genSlaveNamePrefix(String description, String flavorId) {
+        String nameStr = MD516bitUp(description + flavorId);
         return ECSTemplate.srvNamePrefix + nameStr;
     }
 
