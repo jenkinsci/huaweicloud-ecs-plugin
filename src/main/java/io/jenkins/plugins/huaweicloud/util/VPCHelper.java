@@ -7,8 +7,12 @@ import com.huaweicloud.sdk.eip.v2.EipClient;
 import com.huaweicloud.sdk.eip.v2.model.PublicipShowResp;
 import com.huaweicloud.sdk.eip.v2.model.ShowPublicipRequest;
 import com.huaweicloud.sdk.eip.v2.model.ShowPublicipResponse;
+import com.huaweicloud.sdk.ims.v2.ImsClient;
+import com.huaweicloud.sdk.ims.v2.model.ListImagesRequest;
+import com.huaweicloud.sdk.ims.v2.model.ListImagesResponse;
 import io.jenkins.plugins.huaweicloud.ECSTemplate;
 import io.jenkins.plugins.huaweicloud.VPC;
+import org.apache.commons.lang.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -194,9 +198,6 @@ public class VPCHelper {
             if (VPCHelper.isTerminated(server.getStatus())) {
                 continue;
             }
-            if (!server.getImage().getId().equals(template.getImgID())) {
-                continue;
-            }
             if (!template.description.equals(server.getDescription())) {
                 continue;
             }
@@ -215,14 +216,30 @@ public class VPCHelper {
         return sds;
     }
 
+    public static String getImageIDByTag(ImsClient client, String tag) throws SdkException {
+        String imgID = "";
+        ListImagesRequest request = new ListImagesRequest();
+        request.withImagetype(ListImagesRequest.ImagetypeEnum.fromValue("private"));
+        request.withOsType(ListImagesRequest.OsTypeEnum.fromValue("Linux"));
+        if(StringUtils.isNotEmpty(tag)) {
+            request.withTag(tag);
+        }
+        request.withStatus(ListImagesRequest.StatusEnum.fromValue("active"));
+        ListImagesResponse response = client.listImages(request);
+        if (response != null && response.getImages() != null && response.getImages().size() > 0) {
+            imgID = response.getImages().get(0).getId();
+        }
+        return imgID;
+    }
+
 
     public static boolean isTerminated(String state) {
         return "DELETED".equals(state) || "SOFT_DELETED".equals(state);
     }
 
 
-    public static String genSlaveNamePrefix(String description, String flavorId, String imageID) {
-        String nameStr = MD516bitUp(description + flavorId + imageID);
+    public static String genSlaveNamePrefix(String description, String flavorId) {
+        String nameStr = MD516bitUp(description + flavorId);
         return ECSTemplate.srvNamePrefix + nameStr;
     }
 
