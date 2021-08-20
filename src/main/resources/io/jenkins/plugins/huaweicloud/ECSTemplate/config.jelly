@@ -68,6 +68,9 @@
             <f:entry title="${%StopOnIdleTimeout}" field="stopOnTerminate">
                 <f:checkbox/>
             </f:entry>
+            <f:entry title="${%OfflineTimeout}" field="offlineTimeout">
+                <f:textbox default="720"/>
+            </f:entry>
             <f:entry title="${%MinimumNumberOfInstances}" field="minimumNumberOfInstances">
                 <f:textbox/>
             </f:entry>

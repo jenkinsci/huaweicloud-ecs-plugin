@@ -13,8 +13,11 @@
     <f:entry title="${%Region}" field="region">
         <f:select />
     </f:entry>
-    <f:entry field="sshKeysCredentialsId" title="${%Key Pair's Private Key}">
+    <f:entry field="sshKeysCredentialsId" title="${%SSH_Credentials}">
         <c:select includeUser="false" checkMethod="post"/>
+    </f:entry>
+    <f:entry field="associateHWCKeypair" title="${%AssociateHWCKeyPair}">
+        <f:checkbox/>
     </f:entry>
     <f:advanced title="${%Advanced}">
         <f:entry title="${%InstanceCap}" field="instanceCapStr">
@@ -25,5 +28,5 @@
         </f:entry>
     </f:advanced>
     <f:validateButton method="testConnection" title="${%TestConnection}" progress="${%Testing}"
-                      with="region,credentialsId,sshKeysCredentialsId"/>
+                      with="region,credentialsId,sshKeysCredentialsId,associateHWCKeypair"/>
 </j:jelly>
