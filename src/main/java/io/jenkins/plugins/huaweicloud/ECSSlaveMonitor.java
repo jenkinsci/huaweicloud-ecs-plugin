@@ -21,12 +21,10 @@ public class ECSSlaveMonitor extends AsyncPeriodicWork {
     private static final Logger LOGGER = Logger.getLogger(ECSSlaveMonitor.class.getName());
 
     private final Long recurrencePeriod;
-    private transient Clock clock;
 
     public ECSSlaveMonitor() {
         super("ECS Slave monitor");
-        clock = Clock.systemUTC();
-        recurrencePeriod = Long.getLong("jenkins.hwc.checkSlavePeriod", TimeUnit.MINUTES.toMillis(5));
+        recurrencePeriod = Long.getLong("jenkins.hwc.checkSlavePeriod", TimeUnit.MINUTES.toMillis(2));
         LOGGER.log(Level.FINE, "huaweicloud ECS check slave period is {0}ms", recurrencePeriod);
     }
 
@@ -67,10 +65,8 @@ public class ECSSlaveMonitor extends AsyncPeriodicWork {
                 if (timoutMills == 0) {
                     return;
                 }
-                long curMills = clock.millis();
-                long offlineTime = curMills - uptime;
                 LOGGER.info("node is offline timeout by config delete this node");
-                if (offlineTime > timoutMills) {
+                if (uptime > timoutMills) {
                     ecsSlave.terminate();
                 }
             }

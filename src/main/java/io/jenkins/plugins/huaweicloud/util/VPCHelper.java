@@ -8,8 +8,10 @@ import com.huaweicloud.sdk.eip.v2.model.PublicipShowResp;
 import com.huaweicloud.sdk.eip.v2.model.ShowPublicipRequest;
 import com.huaweicloud.sdk.eip.v2.model.ShowPublicipResponse;
 import com.huaweicloud.sdk.ims.v2.ImsClient;
+import com.huaweicloud.sdk.ims.v2.model.ImageInfo;
 import com.huaweicloud.sdk.ims.v2.model.ListImagesRequest;
 import com.huaweicloud.sdk.ims.v2.model.ListImagesResponse;
+import io.jenkins.plugins.huaweicloud.ECSComputer;
 import io.jenkins.plugins.huaweicloud.ECSTemplate;
 import io.jenkins.plugins.huaweicloud.VPC;
 import org.apache.commons.lang.StringUtils;
@@ -178,13 +180,13 @@ public class VPCHelper {
         return instances;
     }
 
-    public static List<ServerDetail> getAllOfAvailableServerByTmp(ECSTemplate template) {
+    public static List<ServerDetail> getAllServerByTmp(ECSTemplate template) {
         List<ServerDetail> servers = new ArrayList<>();
         List<ServerDetail> allOfServerByTmp = getAllOfServerByTmp(template);
         for (ServerDetail detail : allOfServerByTmp) {
             String curStatus = detail.getStatus();
-            if (INSTANCE_STATE_SHUTOFF.equals(curStatus) || INSTANCE_STATE_ERROR.equals(curStatus)
-                    || INSTANCE_STATE_DEL.equals(curStatus) || INSTANCE_STATE_SOFT_DEL.equals(curStatus)) {
+            if (INSTANCE_STATE_ERROR.equals(curStatus) || INSTANCE_STATE_DEL.equals(curStatus)
+                    || INSTANCE_STATE_SOFT_DEL.equals(curStatus)) {
                 continue;
             }
             servers.add(detail);
@@ -221,7 +223,7 @@ public class VPCHelper {
         ListImagesRequest request = new ListImagesRequest();
         request.withImagetype(ListImagesRequest.ImagetypeEnum.fromValue("private"));
         request.withOsType(ListImagesRequest.OsTypeEnum.fromValue("Linux"));
-        if(StringUtils.isNotEmpty(tag)) {
+        if (StringUtils.isNotEmpty(tag)) {
             request.withTag(tag);
         }
         request.withStatus(ListImagesRequest.StatusEnum.fromValue("active"));

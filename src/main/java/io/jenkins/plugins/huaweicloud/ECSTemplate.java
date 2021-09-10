@@ -4,6 +4,7 @@ import com.huaweicloud.sdk.core.exception.SdkException;
 import com.huaweicloud.sdk.ecs.v2.EcsClient;
 import com.huaweicloud.sdk.ecs.v2.model.*;
 import com.huaweicloud.sdk.ims.v2.ImsClient;
+import hudson.DescriptorExtensionList;
 import hudson.Extension;
 import hudson.RelativePath;
 import hudson.Util;
@@ -38,11 +39,10 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     private final static Logger LOGGER = Logger.getLogger(ECSTemplate.class.getName());
     public final String description;
     protected transient VPC parent;
-    //private String imgID;
     private final String flavorID;
     private final String zone;
     public final String labels;
-    public final Node.Mode mode;
+    public  Node.Mode mode;
     private final String subnetIDs;
     public VolumeType rootVolumeType;
     public String rvSizeStr;
@@ -185,7 +185,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         String imgID = "";
         if (imgType.isDynamicType()) {
             try {
-                ImsClient imsClient = VPC.createImsClient(getParent().getRegion(), getParent().getCredentialsId());
+                ImsClient imsClient = getParent().getImsClient();
                 String tag = ((DynamicImageData) imgType).getImgTag();
                 imgID = VPCHelper.getImageIDByTag(imsClient, tag);
             } catch (Exception e) {
@@ -221,6 +221,11 @@ public class ECSTemplate implements Describable<ECSTemplate> {
 
     public Node.Mode getMode() {
         return mode;
+    }
+
+    @DataBoundSetter
+    public void setMode(Node.Mode mode) {
+        this.mode = mode;
     }
 
     public String getSlaveName(String instanceId) {
@@ -296,14 +301,13 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     }
 
     private List<ECSAbstractSlave> provisionOnDemand(int number, EnumSet<ProvisionOptions> provisionOptions) throws SdkException, IOException {
-        List<ServerDetail> orphans = findOrphansOrStopInstance(tplAllInstance(), number);
+        List<ServerDetail> orphans = findOrphansOrStopInstance(number);
         if (orphans.isEmpty() && !provisionOptions.contains(ProvisionOptions.FORCE_CREATE) &&
                 !provisionOptions.contains(ProvisionOptions.ALLOW_CREATE)) {
             logProvisionInfo("No existing instance found - but cannot create new instance");
             return null;
         }
-        wakeUpInstance(orphans);
-        if (orphans.size() == number) {
+        if (wakeUpInstance(orphans) && orphans.size() == number) {
             return toSlaves(orphans);
         }
         int needCreateCount = number - orphans.size();
@@ -314,12 +318,11 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         return toSlaves(instances);
     }
 
-    private void wakeUpInstance(List<ServerDetail> orphans) {
+    private boolean wakeUpInstance(List<ServerDetail> details) {
+        boolean result = true;
         List<String> instances = new ArrayList<>();
-        for (ServerDetail sd : orphans) {
-            if ("SHUTOFF".equals(sd.getStatus())) {
-                instances.add(sd.getId());
-            }
+        for (ServerDetail sd : details) {
+            instances.add(sd.getId());
         }
         try {
             if (!instances.isEmpty()) {
@@ -327,7 +330,9 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             }
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, e.getMessage());
+            result = false;
         }
+        return result;
     }
 
 
@@ -437,11 +442,9 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         return response.getJobId();
     }
 
-    private List<ServerDetail> findOrphansOrStopInstance(List<ServerDetail> tplAllInstance, int number) {
+    private List<ServerDetail> findOrphansOrStopInstance(int number) {
+        List<ServerDetail> tplAllInstance = tplAllInstance();
         List<ServerDetail> orphans = new ArrayList<>();
-        if (tplAllInstance == null) {
-            return orphans;
-        }
         int count = 0;
         for (ServerDetail instance : tplAllInstance) {
             if (checkInstance(instance)) {
@@ -456,9 +459,29 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         return orphans;
     }
 
+    List<ECSAbstractSlave> availableInstanceAsSlave(int number) throws IOException {
+        List<ECSAbstractSlave> slaves = new ArrayList<>();
+        List<ServerDetail> orphans = new ArrayList<>();
+        List<ServerDetail> stopped = new ArrayList<>();
+        for (ServerDetail sd : findOrphansOrStopInstance(number)) {
+            if (VPCHelper.isShutdown(sd.getStatus())) {
+                stopped.add(sd);
+            } else {
+                orphans.add(sd);
+            }
+        }
+        if (stopped.size() > 0 && wakeUpInstance(stopped)) {
+            slaves.addAll(toSlaves(stopped));
+        }
+        if (orphans.size() > 0) {
+            slaves.addAll(toSlaves(orphans));
+        }
+        return slaves;
+    }
+
     private boolean checkInstance(ServerDetail instance) {
         for (ECSAbstractSlave node : NodeIterator.nodes(ECSAbstractSlave.class)) {
-            if (node.getInstanceId().equals(instance.getId()) && !"SHUTOFF".equals(instance.getStatus())) {
+            if (node.getInstanceId().equals(instance.getId()) && !VPCHelper.INSTANCE_STATE_SHUTOFF.equals(instance.getStatus())) {
                 return false;
             }
         }
@@ -471,7 +494,6 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             List<ECSAbstractSlave> slaves = new ArrayList<>(instances.size());
             for (ServerDetail instance : instances) {
                 slaves.add(newOnDemandSlave(instance));
-
             }
             return slaves;
         } catch (Descriptor.FormException e) {
@@ -565,11 +587,6 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         return Jenkins.get().getDescriptor(getClass());
     }
 
-    public String genTmpImproveInfo() {
-        return description + flavorID + zone + labels + mode + rootVolumeType
-                + subnetIDs + associateEIP + remoteFS + remoteAdmin + tmpDir + numExecutors
-                + instanceCap + idleTerminationMinutes + launchTimeout + stopOnTerminate + minimumNumberOfInstances;
-    }
 
     private static PostPaidServer genPostPaidServer(int needCreateCount, String zone, String flavorID, String imgID,
                                                     String vpcId, String description) {
@@ -680,53 +697,10 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             return curVpc;
         }
 
-        private boolean isDescriptionRepeat(VPC vpc, String description, String uniqueInfo) {
-            List<ECSTemplate> templates = vpc.getTemplates();
-            int found = 0;
-            for (ECSTemplate template : templates) {
-                String tmpImproveInfo = template.genTmpImproveInfo();
-                if (description.equals(template.description) && !uniqueInfo.equals(tmpImproveInfo)) {
-                    found++;
-                }
-                LOGGER.info(uniqueInfo);
-                LOGGER.info(tmpImproveInfo);
-            }
-            return found > 0;
-        }
-
-        public FormValidation doCheckDescription(@QueryParameter String description, @QueryParameter String flavorID,
-                                                 @QueryParameter String zone, @QueryParameter String labelString,
-                                                 @QueryParameter Node.Mode mode, @QueryParameter String rootVolumeType,
-                                                 @QueryParameter String subnetIDs, @QueryParameter String associateEIP,
-                                                 @QueryParameter String remoteFS, @QueryParameter String remoteAdmin,
-                                                 @QueryParameter String tmpDir, @QueryParameter String numExecutors,
-                                                 @QueryParameter String idleTerminationMinutes, @QueryParameter String instanceCapStr,
-                                                 @QueryParameter String launchTimeoutStr, @QueryParameter boolean stopOnTerminate,
-                                                 @QueryParameter String minimumNumberOfInstances, @RelativePath("..") @QueryParameter String vpcID) {
+        public FormValidation doCheckDescription(@QueryParameter String description) {
             Jenkins.get().hasPermission(Jenkins.ADMINISTER);
             if (Util.fixEmptyAndTrim(description) == null) {
                 return FormValidation.error("no set template desc");
-            }
-            int instanceCap = Integer.MAX_VALUE;
-            try {
-                instanceCap = Integer.parseInt(instanceCapStr);
-            } catch (NumberFormatException e) {
-                e.printStackTrace();
-            }
-            int launchTimeout;
-            try {
-                launchTimeout = Integer.parseInt(launchTimeoutStr);
-            } catch (NumberFormatException nfe) {
-                launchTimeout = Integer.MAX_VALUE;
-            }
-
-            String tmpImproveInfo = description + flavorID + zone + Util.fixNull(labelString) + mode + rootVolumeType
-                    + subnetIDs + associateEIP + remoteFS + remoteAdmin + tmpDir + Util.fixNull(numExecutors).trim()
-                    + instanceCap + idleTerminationMinutes + launchTimeout + stopOnTerminate + minimumNumberOfInstances;
-            VPC curVpc = getCurVpc(vpcID);
-
-            if (curVpc != null && isDescriptionRepeat(curVpc, description, tmpImproveInfo)) {
-                return FormValidation.error(Messages.TPL_DuplicatedDesc());
             }
             return FormValidation.ok();
         }

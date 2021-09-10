@@ -20,6 +20,8 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -120,7 +122,7 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
             if (initScript != null && initScript.trim().length() > 0
                     && conn.exec("test -e ~/.hudson-run-init", logger) != 0) {
                 logInfo(computer, listener, "Executing init script:" + initScript);
-                scp.put(initScript.getBytes("UTF-8"), "init.sh", tmpDir, "0700");
+                scp.put(initScript.getBytes(StandardCharsets.UTF_8), "init.sh", tmpDir, "0700");
                 Session sess = conn.openSession();
                 sess.requestDumbPTY(); // so that the remote side bundles stdout
                 // and stderr
@@ -158,8 +160,8 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
                 }
                 sess.close();
             }
-            checkAndInstallJava(computer, conn, "java -fullversion", logger, listener);
-            executeRemote(computer, conn, "which scp", "sudo yum install -y openssh-clients", logger, listener);
+            checkAndInstallJava(computer, conn, logger, listener);
+            checkAndInstallOpenSSH(computer, conn, logger, listener);
             // Always copy so we get the most recent slave.jar
             logInfo(computer, listener, "Copying remoting.jar to: " + tmpDir);
             scp.put(Jenkins.get().getJnlpJars("remoting.jar").readFully(), "remoting.jar", tmpDir);
@@ -337,21 +339,46 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
         return true;
     }
 
-    private boolean checkAndInstallJava(ECSComputer computer, Connection conn, String checkCommand,
-                                        PrintStream logger, TaskListener listener) throws IOException, InterruptedException {
+    private void checkAndInstallJava(ECSComputer computer, Connection conn, PrintStream logger, TaskListener listener)
+            throws IOException, InterruptedException {
+        String checkCommand = "java -fullversion";
         logInfo(computer, listener, "Verifying: " + checkCommand);
         if (conn.exec(checkCommand, logger) != 0) {
             //Since don’t know the corresponding package management tool of the system, optimization is needed here
-            String rpmInstallCommand = "sudo yum install -y java-1.8.0-openjdk.x86_64";
-            String aptInstallCommand = "sudo apt-get install -y openjdk-8-jdk";
-            if (conn.exec(rpmInstallCommand, logger) == 0) {
-                return true;
+            List<String> commands = new ArrayList<>();
+            commands.add("sudo yum install -y java-1.8.0-openjdk.x86_64");
+            commands.add("sudo apt-get install -y openjdk-8-jdk");
+            commands.add("sudo dnf install -y java-1.8.0-openjdk.x86_64");
+            for (String s : commands) {
+                if (conn.exec(s, logger) == 0) {
+                    return;
+                }
             }
-            return conn.exec(aptInstallCommand, logger) == 0;
+            logWarning(computer, listener, "Failed to install java");
         }
-        return true;
 
     }
+
+    private void checkAndInstallOpenSSH(ECSComputer computer, Connection conn, PrintStream logger, TaskListener listener)
+            throws IOException, InterruptedException {
+        String checkCommand = "which scp";
+        logInfo(computer, listener, "Verifying: " + checkCommand);
+        if (conn.exec(checkCommand, logger) != 0) {
+            //Since don’t know the corresponding package management tool of the system, optimization is needed here
+            List<String> commands = new ArrayList<>();
+            commands.add("sudo yum install -y openssh-clients");
+            commands.add("sudo apt-get install -y openssh-client");
+            commands.add("sudo dnf install -y openssh-clients");
+            for (String s : commands) {
+                if (conn.exec(s, logger) == 0) {
+                    return;
+                }
+            }
+            logWarning(computer, listener, "Failed to install open ssh");
+        }
+
+    }
+
 
     private static class ServerHostKeyVerifierImpl implements ServerHostKeyVerifier {
         private final ECSComputer computer;

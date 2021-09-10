@@ -2,7 +2,7 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout"
          xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:ec="/lib/hwc">
     <ec:blockWrapper>
-        <f:entry title="${%Description}" field="description">
+        <f:entry title="${%Description}" field="description" description="${%TemplateDesc}">
             <f:textbox/>
         </f:entry>
         <f:dropdownDescriptorSelector title="${%ImageType}" field="imgType"

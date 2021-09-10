@@ -91,13 +91,13 @@ public abstract class ECSAbstractSlave extends Slave {
     }
 
     public long getOfflineTimeoutMills() {
-        long offlineTimeoutMills = 720;
+        long offlineTimeoutMinutes = 720;
         try {
-            offlineTimeoutMills = Integer.parseInt(this.offlineTimeout.trim());
+            offlineTimeoutMinutes = Integer.parseInt(this.offlineTimeout.trim());
         } catch (Exception e) {
             LOGGER.info(e.getMessage());
         }
-        return offlineTimeoutMills;
+        return TimeUnit.MINUTES.toMillis(offlineTimeoutMinutes);
     }
 
     @Override
@@ -181,7 +181,7 @@ public abstract class ECSAbstractSlave extends Slave {
     }
 
     String getRootCommandPrefix() {
-        return "";
+        return "sudo";
     }
 
     String getSlaveCommandPrefix() {
@@ -226,9 +226,6 @@ public abstract class ECSAbstractSlave extends Slave {
         if (instance == null) return;
         lastFetchTime = now;
         lastFetchInstance = instance;
-        if (instance == null) {
-            return;
-        }
         createdTime = TimeUtils.dateStrToLong(instance.getCreated());
         try {
             List<ServerTag> serverTags = VPCHelper.getServerTags(getInstanceId(), getCloud());
