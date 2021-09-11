@@ -16,6 +16,8 @@ import com.huaweicloud.sdk.eip.v2.EipClient;
 import com.huaweicloud.sdk.eip.v2.region.EipRegion;
 import com.huaweicloud.sdk.iam.v3.IamClient;
 import com.huaweicloud.sdk.iam.v3.region.IamRegion;
+import com.huaweicloud.sdk.ims.v2.ImsClient;
+import com.huaweicloud.sdk.ims.v2.region.ImsRegion;
 import hudson.Util;
 import hudson.model.*;
 import hudson.security.ACL;
@@ -27,6 +29,9 @@ import hudson.util.ListBoxModel;
 import hudson.util.StreamTaskListener;
 import io.jenkins.plugins.huaweicloud.credentials.AccessKeyCredentials;
 import io.jenkins.plugins.huaweicloud.credentials.HWCAccessKeyCredentials;
+import io.jenkins.plugins.huaweicloud.model.ProvisionExcess;
+import io.jenkins.plugins.huaweicloud.model.ValidNodeContainer;
+import io.jenkins.plugins.huaweicloud.util.ProvisionExcessController;
 import io.jenkins.plugins.huaweicloud.util.TimeUtils;
 import io.jenkins.plugins.huaweicloud.util.VPCHelper;
 import jenkins.model.Jenkins;
@@ -54,6 +59,7 @@ public abstract class VPC extends Cloud {
     private static final Logger LOGGER = Logger.getLogger(VPC.class.getName());
     private final String credentialsId;
     private final String sshKeysCredentialsId;
+    private final boolean associateHWCKeypair;
     private final String vpcID;
     private String region;
     private final int instanceCap;
@@ -61,14 +67,15 @@ public abstract class VPC extends Cloud {
     private final List<? extends ECSTemplate> templates;
     private transient NovaKeypair usableKeyPair;
     private transient ReentrantLock slaveCountingLock = new ReentrantLock();
+    private transient ProvisionExcessController peController = new ProvisionExcessController();
 
     protected VPC(String id, @CheckForNull String credentialsId, @CheckForNull String sshKeysCredentialsId, String instanceCapStr,
-                  String vpcID, List<? extends ECSTemplate> templates) {
+                  String vpcID, boolean associateHWCKeypair, List<? extends ECSTemplate> templates) {
         super(id);
         this.credentialsId = credentialsId;
         this.sshKeysCredentialsId = sshKeysCredentialsId;
         this.vpcID = vpcID;
-
+        this.associateHWCKeypair = associateHWCKeypair;
         if (instanceCapStr == null || instanceCapStr.isEmpty()) {
             this.instanceCap = Integer.MAX_VALUE;
         } else {
@@ -92,15 +99,38 @@ public abstract class VPC extends Cloud {
         return region;
     }
 
+    public boolean isAssociateHWCKeypair() {
+        return associateHWCKeypair;
+    }
+
+    private synchronized void genPeController() {
+        if (peController == null) {
+            peController = new ProvisionExcessController();
+        }
+    }
+
+    private ReentrantLock genSlaveCountingLock() {
+        if (slaveCountingLock == null) {
+            slaveCountingLock = new ReentrantLock();
+        }
+        return slaveCountingLock;
+    }
+
     @DataBoundSetter
     public void setRegion(String region) {
         this.region = region;
     }
 
-    protected Object readResolve() {
+    private Object readResolve() {
         this.slaveCountingLock = new ReentrantLock();
-        for (ECSTemplate t : templates)
+        this.peController = new ProvisionExcessController();
+        for (ECSTemplate t : templates) {
             t.parent = this;
+            t.vpcid = this.vpcID;
+            if (t.getMode() == Node.Mode.EXCLUSIVE && StringUtils.trimToEmpty(t.labels).isEmpty()) {
+                t.setMode(Node.Mode.NORMAL);
+            }
+        }
         return this;
     }
 
@@ -139,14 +169,35 @@ public abstract class VPC extends Cloud {
      * Gets list of {@link ECSTemplate} that matches {@link Label}.
      */
     public Collection<ECSTemplate> getTemplates(Label label) {
+        if (label != null) {
+            return getTemplatesByLabel(label);
+        }
+        return getTemplatesByEmptyLabel();
+    }
+
+    private List<ECSTemplate> getTemplatesByLabel(Label label) {
+        List<ECSTemplate> matchingTemplates = new ArrayList<>();
+        for (ECSTemplate t : templates) {
+            //EXCLUSIVE pattern matching and label matching has a higher priority
+            if (t.getMode() == Node.Mode.EXCLUSIVE && label.matches(t.getLabelSet())) {
+                matchingTemplates.add(0, t);
+                continue;
+            }
+            if (t.getMode() == Node.Mode.NORMAL && label.matches(t.getLabelSet())) {
+                matchingTemplates.add(t);
+            }
+        }
+        return matchingTemplates;
+    }
+
+    private List<ECSTemplate> getTemplatesByEmptyLabel() {
         List<ECSTemplate> matchingTemplates = new ArrayList<>();
         for (ECSTemplate t : templates) {
             if (t.getMode() == Node.Mode.NORMAL) {
-                if (label == null || label.matches(t.getLabelSet())) {
-                    matchingTemplates.add(t);
-                }
-            } else if (t.getMode() == Node.Mode.EXCLUSIVE) {
-                if (label != null && label.matches(t.getLabelSet())) {
+                //The template does not specify a label with a higher priority
+                if (t.getLabelSet() == null || t.getLabelSet().isEmpty()) {
+                    matchingTemplates.add(0, t);
+                } else {
                     matchingTemplates.add(t);
                 }
             }
@@ -164,6 +215,10 @@ public abstract class VPC extends Cloud {
 
     public EipClient getEipClient() {
         return createEipClient(this.region, this.credentialsId);
+    }
+
+    public ImsClient getImsClient() {
+        return createImsClient(this.region, this.credentialsId);
     }
 
     public abstract URL getEc2EndpointUrl() throws IOException;
@@ -190,7 +245,7 @@ public abstract class VPC extends Cloud {
         if (sshKeysCredentialsId != null) {
             SSHUserPrivateKey privateKeyCredential = getSshCredential(sshKeysCredentialsId);
             if (privateKeyCredential != null) {
-                return new ECSPrivateKey(privateKeyCredential.getPrivateKey(), privateKeyCredential.getId(), getEcsClient());
+                return new ECSPrivateKey(privateKeyCredential, this.associateHWCKeypair, getEcsClient());
             }
         }
         return null;
@@ -232,7 +287,7 @@ public abstract class VPC extends Cloud {
             throw hudson.util.HttpResponses.error(SC_BAD_REQUEST, "Jenkins instance is terminating");
         }
         try {
-            List<ECSAbstractSlave> nodes = getNewOrExistingAvailableSlave(t, 1, true);
+            List<ECSAbstractSlave> nodes = createAvailableSlave(t, 1, true);
             if (nodes == null || nodes.isEmpty())
                 throw hudson.util.HttpResponses.error(SC_BAD_REQUEST, "Cloud or AMI instance cap would be exceeded for: " + template);
 
@@ -265,47 +320,119 @@ public abstract class VPC extends Cloud {
 
     @Override
     public Collection<NodeProvisioner.PlannedNode> provision(final Cloud.CloudState state, int excessWorkload) {
-        Label label = state.getLabel();
-        final Collection<ECSTemplate> matchingTemplates = getTemplates(label);
         List<NodeProvisioner.PlannedNode> plannedNodes = new ArrayList<>();
+        Label label = state.getLabel();
 
-        Jenkins jenkinsInstance = Jenkins.get();
-        if (jenkinsInstance.isQuietingDown()) {
-            LOGGER.log(Level.FINE, "Not provisioning nodes, Jenkins instance is quieting down");
-            return Collections.emptyList();
-        } else if (jenkinsInstance.isTerminating()) {
-            LOGGER.log(Level.FINE, "Not provisioning nodes, Jenkins instance is terminating");
-            return Collections.emptyList();
+        ProvisionExcess pe = new ProvisionExcess(label, excessWorkload);
+        LOGGER.log(Level.INFO, "task of  " + pe.toString());
+        if (peController == null) {
+            genPeController();
         }
 
-        for (ECSTemplate t : matchingTemplates) {
-            try {
-                LOGGER.log(Level.INFO, "{0}. Attempting to provision slave needed by excess workload of " + excessWorkload + " units", t);
-                int number = Math.max(excessWorkload / t.getNumExecutors(), 1);
-                final List<ECSAbstractSlave> slaves = getNewOrExistingAvailableSlave(t, number, false);
+        try {
+            if (!peController.runPE(pe)) {
+                LOGGER.log(Level.INFO, "Cancel the same provision slave task");
+                return plannedNodes;
+            }
 
-                if (slaves == null || slaves.isEmpty()) {
-                    LOGGER.warning("Can't raise nodes for " + t);
+            final Collection<ECSTemplate> matchingTemplates = getTemplates(label);
+            if (matchingTemplates == null || matchingTemplates.size() == 0) {
+                LOGGER.log(Level.FINE, "Not provisioning nodes, no match template by task status");
+                return null;
+            }
+
+            Jenkins jenkinsInstance = Jenkins.get();
+            if (jenkinsInstance.isQuietingDown()) {
+                LOGGER.log(Level.FINE, "Not provisioning nodes, Jenkins instance is quieting down");
+                return Collections.emptyList();
+            } else if (jenkinsInstance.isTerminating()) {
+                LOGGER.log(Level.FINE, "Not provisioning nodes, Jenkins instance is terminating");
+                return Collections.emptyList();
+            }
+            plannedNodes.addAll(provisionNodes(matchingTemplates, excessWorkload));
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Not provisioning nodes, with exception: " + e.getMessage());
+        } finally {
+            peController.donePE(pe);
+        }
+
+        return plannedNodes;
+    }
+
+    private Collection<NodeProvisioner.PlannedNode> provisionNodes(Collection<ECSTemplate> templates, int excessWorkload) {
+        List<NodeProvisioner.PlannedNode> plannedNodes = new ArrayList<>();
+        ValidNodeContainer orphanedContainer = genNodesWithOrphaned(templates, excessWorkload);
+        if (orphanedContainer.getNodes().size() > 0) {
+            plannedNodes.addAll(orphanedContainer.getNodes());
+            excessWorkload -= orphanedContainer.getExcessWorkload();
+        }
+        //When creating an ecs instance fails, decrement the number of creations and retry
+        while (excessWorkload > 0) {
+            ValidNodeContainer createdContainer = genNodesByCreate(templates, excessWorkload);
+            int containerExcess = createdContainer.getExcessWorkload();
+            if (excessWorkload == 1 && containerExcess == 0) {
+                break;
+            }
+            if (containerExcess > 0) {
+                plannedNodes.addAll(createdContainer.getNodes());
+                excessWorkload -= containerExcess;
+            } else {
+                excessWorkload = excessWorkload / 2;
+            }
+        }
+
+        LOGGER.log(Level.INFO, "We have now {0} computers, waiting for {1} more",
+                new Object[]{Jenkins.get().getComputers().length, plannedNodes.size()});
+        return plannedNodes;
+    }
+
+    private ValidNodeContainer genNodesByCreate(Collection<ECSTemplate> templates, int excessWorkload) {
+        ValidNodeContainer container = new ValidNodeContainer();
+        for (ECSTemplate t : templates) {
+            int numExecutors = t.getNumExecutors();
+            int number = Math.max(excessWorkload / numExecutors, 1);
+            List<ECSAbstractSlave> availableSlave = createAvailableSlave(t, number, false);
+            if (availableSlave == null) {
+                continue;
+            }
+            for (final ECSAbstractSlave s : availableSlave) {
+                if (s == null) {
+                    LOGGER.warning("Can't raise node for " + t);
                     continue;
                 }
-                for (final ECSAbstractSlave slave : slaves) {
-                    if (slave == null) {
+                container.addSlave(createPlannedNode(t, s), numExecutors);
+                excessWorkload -= numExecutors;
+            }
+            if (excessWorkload <= 0) {
+                break;
+            }
+        }
+        return container;
+    }
+
+    private ValidNodeContainer genNodesWithOrphaned(Collection<ECSTemplate> templates, int excessWorkload) {
+        ValidNodeContainer container = new ValidNodeContainer();
+        for (ECSTemplate t : templates) {
+            int numExecutors = t.getNumExecutors();
+            int number = Math.max(excessWorkload / numExecutors, 1);
+            try {
+                List<ECSAbstractSlave> slaves = t.availableInstanceAsSlave(number);
+                for (final ECSAbstractSlave s : slaves) {
+                    if (s == null) {
                         LOGGER.warning("Can't raise node for " + t);
                         continue;
                     }
-
-                    plannedNodes.add(createPlannedNode(t, slave));
-                    excessWorkload -= t.getNumExecutors();
+                    container.addSlave(createPlannedNode(t, s), numExecutors);
+                    excessWorkload -= numExecutors;
                 }
-                LOGGER.log(Level.INFO, "{0}. Attempting provision finished, excess workload: " + excessWorkload, t);
-                if (excessWorkload == 0) break;
             } catch (Exception e) {
-                LOGGER.log(Level.WARNING, t + ". Exception during provisioning", e);
+                LOGGER.log(Level.WARNING, t + "get available instance by template occur exception: " + e.getMessage());
+            }
+            if (excessWorkload <= 0) {
+                break;
             }
         }
-        LOGGER.log(Level.INFO, "We have now {0} computers, waiting for {1} more",
-                new Object[]{jenkinsInstance.getComputers().length, plannedNodes.size()});
-        return plannedNodes;
+        return container;
     }
 
     private NodeProvisioner.PlannedNode createPlannedNode(ECSTemplate t, ECSAbstractSlave slave) {
@@ -372,7 +499,7 @@ public abstract class VPC extends Cloud {
         }
         try {
             LOGGER.log(Level.INFO, "{0}. Attempting to provision {1} slave(s)", new Object[]{t, number});
-            final List<ECSAbstractSlave> slaves = getNewOrExistingAvailableSlave(t, number, false);
+            final List<ECSAbstractSlave> slaves = createAvailableSlave(t, number, false);
 
             if (slaves == null || slaves.isEmpty()) {
                 LOGGER.warning("Can't raise nodes for " + t);
@@ -405,9 +532,9 @@ public abstract class VPC extends Cloud {
         }
     }
 
-    private List<ECSAbstractSlave> getNewOrExistingAvailableSlave(ECSTemplate t, int number, boolean forceCreateNew) {
+    private List<ECSAbstractSlave> createAvailableSlave(ECSTemplate t, int number, boolean forceCreateNew) {
         try {
-            slaveCountingLock.lock();
+            genSlaveCountingLock().lock();
             int possibleSlavesCount = getPossibleNewSlavesCount(t);
             if (possibleSlavesCount <= 0) {
                 LOGGER.log(Level.INFO, "{0}. Cannot provision - no capacity for instances: " + possibleSlavesCount, t);
@@ -427,7 +554,7 @@ public abstract class VPC extends Cloud {
                 }
                 return t.provision(number, provisionOptions);
             } catch (IOException e) {
-                LOGGER.log(Level.WARNING, t + ". Exception during provisioning", e);
+                LOGGER.log(Level.WARNING, t + ". Exception during provisioning", e.getMessage());
                 return null;
             }
         } finally {
@@ -437,7 +564,7 @@ public abstract class VPC extends Cloud {
 
     private int getPossibleNewSlavesCount(ECSTemplate t) {
         List<ServerDetail> allInstances = VPCHelper.getAllOfServerList(this);
-        List<ServerDetail> tmpInstance = VPCHelper.getAllOfServerByTmp(t);
+        List<ServerDetail> tmpInstance = VPCHelper.getAllServerByTmp(t);
         int availableTotalSlave = instanceCap - allInstances.size();
         int availableTmpSlave = t.getInstanceCap() - tmpInstance.size();
         LOGGER.log(Level.FINE, "Available Total Slaves: " + availableTotalSlave + " Available AMI slaves: " + availableTmpSlave
@@ -509,7 +636,15 @@ public abstract class VPC extends Cloud {
         ICredential auth = createBasicCredential(credentialsId);
         return EipClient.newBuilder()
                 .withCredential(auth)
-                .withRegion(EipRegion.valueOf("cn-south-1"))
+                .withRegion(EipRegion.valueOf(region))
+                .build();
+    }
+
+    public static ImsClient createImsClient(String region, String credentialsId) {
+        ICredential auth = createBasicCredential(credentialsId);
+        return ImsClient.newBuilder()
+                .withCredential(auth)
+                .withRegion(ImsRegion.valueOf(region))
                 .build();
     }
 
@@ -542,7 +677,6 @@ public abstract class VPC extends Cloud {
             for (Cloud c : Jenkins.get().clouds) {
                 if (c instanceof VPC) {
                     VPC vpc = (VPC) c;
-
                     if (vpc.getVpcID() != null && vpc.getVpcID().equals(value)) {
                         found++;
                     }
@@ -612,7 +746,7 @@ public abstract class VPC extends Cloud {
             return FormValidation.ok();
         }
 
-        protected FormValidation doTestConnection(String region, String credentialsId, String sshKeysCredentialsId) {
+        protected FormValidation doTestConnection(String region, String credentialsId, String sshKeysCredentialsId, boolean associateHWCKeypair) {
             Jenkins.get().checkPermission(Jenkins.ADMINISTER);
             try {
                 SSHUserPrivateKey sshCredential = getSshCredential(sshKeysCredentialsId);
@@ -624,7 +758,7 @@ public abstract class VPC extends Cloud {
                 }
                 if (privateKey.trim().length() > 0) {
                     EcsClient ecsClient = createEcsClient(region, credentialsId);
-                    ECSPrivateKey pk = new ECSPrivateKey(privateKey, sshCredential.getId(), ecsClient);
+                    ECSPrivateKey pk = new ECSPrivateKey(sshCredential, associateHWCKeypair, ecsClient);
                     if (pk.find() == null) {
                         return FormValidation
                                 .error("The ECS key pair private key isn't registered to this EC2 region (fingerprint is "

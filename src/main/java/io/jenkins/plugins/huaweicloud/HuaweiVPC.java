@@ -28,8 +28,8 @@ public class HuaweiVPC extends VPC {
 
     @DataBoundConstructor
     public HuaweiVPC(String cloudName, String credentialsId, String sshKeysCredentialsId, String instanceCapStr,
-                     String vpcID, List<? extends ECSTemplate> templates) {
-        super(createCloudId(cloudName), credentialsId, sshKeysCredentialsId, instanceCapStr, vpcID, templates);
+                     String vpcID, boolean associateHWCKeypair, List<? extends ECSTemplate> templates) {
+        super(createCloudId(cloudName), credentialsId, sshKeysCredentialsId, instanceCapStr, vpcID, associateHWCKeypair, templates);
     }
 
     public boolean isNoDelayProvisioning() {
@@ -113,12 +113,14 @@ public class HuaweiVPC extends VPC {
         }
 
         @RequirePOST
-        public FormValidation doTestConnection(@QueryParameter String region, @QueryParameter String credentialsId, @QueryParameter String sshKeysCredentialsId) {
+        public FormValidation doTestConnection(@QueryParameter String region, @QueryParameter String credentialsId,
+                                               @QueryParameter String sshKeysCredentialsId,
+                                               @QueryParameter boolean associateHWCKeypair) {
             if (Util.fixEmptyAndTrim(region) == null || Util.fixEmptyAndTrim(credentialsId) == null ||
                     Util.fixEmptyAndTrim(sshKeysCredentialsId) == null) {
                 return FormValidation.error(Messages.HuaweiECSCloud_ErrorConfig());
             }
-            return super.doTestConnection(region, credentialsId, sshKeysCredentialsId);
+            return super.doTestConnection(region, credentialsId, sshKeysCredentialsId, associateHWCKeypair);
         }
     }
 }

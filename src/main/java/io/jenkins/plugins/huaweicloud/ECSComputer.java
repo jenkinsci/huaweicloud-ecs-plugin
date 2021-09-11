@@ -35,6 +35,10 @@ public class ECSComputer extends SlaveComputer {
         return node == null ? null : node.getInstanceId();
     }
 
+    public ServerDetail getEcsInstanceDescription() {
+        return ecsInstanceDescription;
+    }
+
     public String getEc2Type() {
         ECSAbstractSlave node = getNode();
         return node == null ? null : node.getECSType();
