@@ -39,10 +39,11 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     private final static Logger LOGGER = Logger.getLogger(ECSTemplate.class.getName());
     public final String description;
     protected transient VPC parent;
+    public String vpcid;
     private final String flavorID;
     private final String zone;
     public final String labels;
-    public  Node.Mode mode;
+    public Node.Mode mode;
     private final String subnetIDs;
     public VolumeType rootVolumeType;
     public String rvSizeStr;
@@ -178,6 +179,17 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     }
 
     public VPC getParent() {
+        if (parent == null) {
+            for (Cloud c : Jenkins.get().clouds) {
+                if (c instanceof VPC) {
+                    VPC cc = (VPC) c;
+                    if (cc.getVpcID().equals(this.vpcid)) {
+                        parent = cc;
+                        break;
+                    }
+                }
+            }
+        }
         return parent;
     }
 

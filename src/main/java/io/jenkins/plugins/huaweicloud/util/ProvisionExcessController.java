@@ -8,7 +8,11 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class ProvisionExcessController {
     private final ReentrantLock lock = new ReentrantLock();
-    private Map<String, ProvisionExcess> runningExcess = new HashMap<>();
+    private Map<String, ProvisionExcess> runningExcess;
+
+    public ProvisionExcessController() {
+        this.runningExcess = new HashMap<>();
+    }
 
     public boolean runPE(ProvisionExcess pe) {
         boolean runSuccess = false;

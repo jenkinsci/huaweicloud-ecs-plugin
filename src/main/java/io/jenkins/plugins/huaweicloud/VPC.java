@@ -103,20 +103,35 @@ public abstract class VPC extends Cloud {
         return associateHWCKeypair;
     }
 
+    private synchronized void genPeController() {
+        if (peController == null) {
+            peController = new ProvisionExcessController();
+        }
+    }
+
+    private ReentrantLock genSlaveCountingLock() {
+        if (slaveCountingLock == null) {
+            slaveCountingLock = new ReentrantLock();
+        }
+        return slaveCountingLock;
+    }
+
     @DataBoundSetter
     public void setRegion(String region) {
         this.region = region;
     }
 
-    private void readResolve() {
+    private Object readResolve() {
         this.slaveCountingLock = new ReentrantLock();
         this.peController = new ProvisionExcessController();
         for (ECSTemplate t : templates) {
             t.parent = this;
+            t.vpcid = this.vpcID;
             if (t.getMode() == Node.Mode.EXCLUSIVE && StringUtils.trimToEmpty(t.labels).isEmpty()) {
                 t.setMode(Node.Mode.NORMAL);
             }
         }
+        return this;
     }
 
     @CheckForNull
@@ -310,8 +325,12 @@ public abstract class VPC extends Cloud {
 
         ProvisionExcess pe = new ProvisionExcess(label, excessWorkload);
         LOGGER.log(Level.INFO, "task of  " + pe.toString());
+        if (peController == null) {
+            genPeController();
+        }
+
         try {
-            if (peController != null && !peController.runPE(pe)) {
+            if (!peController.runPE(pe)) {
                 LOGGER.log(Level.INFO, "Cancel the same provision slave task");
                 return plannedNodes;
             }
@@ -334,9 +353,7 @@ public abstract class VPC extends Cloud {
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Not provisioning nodes, with exception: " + e.getMessage());
         } finally {
-            if (peController != null) {
-                peController.donePE(pe);
-            }
+            peController.donePE(pe);
         }
 
         return plannedNodes;
@@ -409,7 +426,7 @@ public abstract class VPC extends Cloud {
                     excessWorkload -= numExecutors;
                 }
             } catch (Exception e) {
-                LOGGER.log(Level.WARNING, t + "get available instance by template occur exception", e.getMessage());
+                LOGGER.log(Level.WARNING, t + "get available instance by template occur exception: " + e.getMessage());
             }
             if (excessWorkload <= 0) {
                 break;
@@ -517,7 +534,7 @@ public abstract class VPC extends Cloud {
 
     private List<ECSAbstractSlave> createAvailableSlave(ECSTemplate t, int number, boolean forceCreateNew) {
         try {
-            slaveCountingLock.lock();
+            genSlaveCountingLock().lock();
             int possibleSlavesCount = getPossibleNewSlavesCount(t);
             if (possibleSlavesCount <= 0) {
                 LOGGER.log(Level.INFO, "{0}. Cannot provision - no capacity for instances: " + possibleSlavesCount, t);

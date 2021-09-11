@@ -65,8 +65,8 @@ public class ECSSlaveMonitor extends AsyncPeriodicWork {
                 if (timoutMills == 0) {
                     return;
                 }
-                LOGGER.info("node is offline timeout by config delete this node");
                 if (uptime > timoutMills) {
+                    LOGGER.info("node is offline timeout by config delete this node");
                     ecsSlave.terminate();
                 }
             }
