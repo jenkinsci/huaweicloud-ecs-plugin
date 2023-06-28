@@ -3,12 +3,15 @@ package io.jenkins.plugins.huaweicloud;
 import com.huaweicloud.sdk.core.exception.SdkException;
 import com.huaweicloud.sdk.ecs.v2.EcsClient;
 import com.huaweicloud.sdk.ecs.v2.model.*;
+import com.huaweicloud.sdk.ims.v2.ImsClient;
+import hudson.DescriptorExtensionList;
 import hudson.Extension;
 import hudson.RelativePath;
 import hudson.Util;
 import hudson.model.*;
 import hudson.model.labels.LabelAtom;
 import hudson.security.Permission;
+import hudson.slaves.Cloud;
 import hudson.slaves.NodeProperty;
 import hudson.slaves.NodePropertyDescriptor;
 import hudson.util.DescribableList;
@@ -20,9 +23,7 @@ import io.jenkins.plugins.huaweicloud.util.VPCHelper;
 import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
 import org.apache.commons.lang.StringUtils;
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.QueryParameter;
-import org.kohsuke.stapler.Stapler;
+import org.kohsuke.stapler.*;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import java.io.IOException;
@@ -38,11 +39,11 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     private final static Logger LOGGER = Logger.getLogger(ECSTemplate.class.getName());
     public final String description;
     protected transient VPC parent;
-    private String imgID;
+    public String vpcid;
     private final String flavorID;
     private final String zone;
     public final String labels;
-    public final Node.Mode mode;
+    public Node.Mode mode;
     private final String subnetIDs;
     public VolumeType rootVolumeType;
     public String rvSizeStr;
@@ -52,9 +53,11 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     public final String remoteFS;
     public final String remoteAdmin;
     public final String idleTerminationMinutes;
+    public final String offlineTimeout;
     public final String initScript;
     public final String tmpDir;
     public int launchTimeout;
+    public ImageTypeData imgType;
     private final boolean associateEIP;
     public static final String srvNamePrefix = "JenkinsHWCSlave_";
     private /* lazily initialized */ DescribableList<NodeProperty<?>, NodePropertyDescriptor> nodeProperties;
@@ -70,13 +73,14 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     public String mountQuantity;
 
     @DataBoundConstructor
-    public ECSTemplate(String description, String imgID, String flavorID,
+    public ECSTemplate(String description, String flavorID,
                        String zone, String labelString, Node.Mode mode, String remoteAdmin,
                        String subnetIDs, VolumeType rootVolumeType, VolumeType dvType, String remoteFS,
                        String rvSizeStr, List<ECSTag> tags, String numExecutors,
-                       String idleTerminationMinutes, String launchTimeoutStr, String initScript, String tmpDir,
+                       String idleTerminationMinutes, String offlineTimeout, String launchTimeoutStr, String initScript, String tmpDir,
                        List<? extends NodeProperty<?>> nodeProperties, int minimumNumberOfInstances, boolean associateEIP,
-                       boolean stopOnTerminate, String userData, String instanceCapStr, boolean mountDV, String dvSize, String mountQuantity) {
+                       boolean stopOnTerminate, String userData, String instanceCapStr, boolean mountDV, String dvSize,
+                       String mountQuantity, ImageTypeData imgType) {
         if (StringUtils.isNotBlank(remoteAdmin) || StringUtils.isNotBlank(tmpDir)) {
             LOGGER.log(Level.FINE, "As remoteAdmin or tmpDir is not blank, we must ensure the user has ADMINISTER rights.");
             // Can be null during tests
@@ -88,7 +92,6 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         this.dvSize = dvSize;
         this.associateEIP = associateEIP;
         this.description = description;
-        this.imgID = imgID;
         this.flavorID = flavorID;
         this.zone = zone;
         this.labels = Util.fixNull(labelString);
@@ -102,29 +105,43 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         this.remoteAdmin = remoteAdmin;
         this.initScript = initScript;
         this.tmpDir = tmpDir;
-        if (StringUtils.isNotEmpty(rvSizeStr)) {
+
+        try {
             this.rvSize = Integer.parseInt(rvSizeStr);
+        } catch (NumberFormatException e) {
+            LOGGER.log(Level.FINE, e.getMessage());
         }
         this.tags = tags;
         this.idleTerminationMinutes = idleTerminationMinutes;
+        this.offlineTimeout = offlineTimeout;
         try {
             this.launchTimeout = Integer.parseInt(launchTimeoutStr);
         } catch (NumberFormatException nfe) {
             this.launchTimeout = Integer.MAX_VALUE;
         }
 
-        if (null == instanceCapStr || instanceCapStr.isEmpty()) {
-            this.instanceCap = Integer.MAX_VALUE;
-        } else {
+        try {
             this.instanceCap = Integer.parseInt(instanceCapStr);
+        } catch (NumberFormatException e) {
+            this.instanceCap = Integer.MAX_VALUE;
         }
+
 
         this.nodeProperties = new DescribableList<>(Saveable.NOOP, Util.fixNull(nodeProperties));
         this.minimumNumberOfInstances = minimumNumberOfInstances;
         this.stopOnTerminate = stopOnTerminate;
         this.userData = StringUtils.trimToEmpty(userData);
         this.mountQuantity = mountQuantity;
+        this.imgType = imgType;
         readResolve();
+    }
+
+    public ImageTypeData getImgType() {
+        return imgType;
+    }
+
+    public void setImgType(ImageTypeData imgType) {
+        this.imgType = imgType;
     }
 
     public boolean isMountDV() {
@@ -162,15 +179,34 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     }
 
     public VPC getParent() {
+        if (parent == null) {
+            for (Cloud c : Jenkins.get().clouds) {
+                if (c instanceof VPC) {
+                    VPC cc = (VPC) c;
+                    if (cc.getVpcID().equals(this.vpcid)) {
+                        parent = cc;
+                        break;
+                    }
+                }
+            }
+        }
         return parent;
     }
 
     public String getImgID() {
+        String imgID = "";
+        if (imgType.isDynamicType()) {
+            try {
+                ImsClient imsClient = getParent().getImsClient();
+                String tag = ((DynamicImageData) imgType).getImgTag();
+                imgID = VPCHelper.getImageIDByTag(imsClient, tag);
+            } catch (Exception e) {
+                LOGGER.info(e.getMessage());
+            }
+        } else {
+            imgID = ((StaticImageData) imgType).getImageId();
+        }
         return imgID;
-    }
-
-    public void setAmi(String imgID) {
-        this.imgID = imgID;
     }
 
     public int getMinimumNumberOfInstances() {
@@ -197,6 +233,11 @@ public class ECSTemplate implements Describable<ECSTemplate> {
 
     public Node.Mode getMode() {
         return mode;
+    }
+
+    @DataBoundSetter
+    public void setMode(Node.Mode mode) {
+        this.mode = mode;
     }
 
     public String getSlaveName(String instanceId) {
@@ -272,14 +313,13 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     }
 
     private List<ECSAbstractSlave> provisionOnDemand(int number, EnumSet<ProvisionOptions> provisionOptions) throws SdkException, IOException {
-        List<ServerDetail> orphans = findOrphansOrStopInstance(tplAllInstance(), number);
+        List<ServerDetail> orphans = findOrphansOrStopInstance(number);
         if (orphans.isEmpty() && !provisionOptions.contains(ProvisionOptions.FORCE_CREATE) &&
                 !provisionOptions.contains(ProvisionOptions.ALLOW_CREATE)) {
             logProvisionInfo("No existing instance found - but cannot create new instance");
             return null;
         }
-        wakeUpInstance(orphans);
-        if (orphans.size() == number) {
+        if (wakeUpInstance(orphans) && orphans.size() == number) {
             return toSlaves(orphans);
         }
         int needCreateCount = number - orphans.size();
@@ -290,12 +330,11 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         return toSlaves(instances);
     }
 
-    private void wakeUpInstance(List<ServerDetail> orphans) {
+    private boolean wakeUpInstance(List<ServerDetail> details) {
+        boolean result = true;
         List<String> instances = new ArrayList<>();
-        for (ServerDetail sd : orphans) {
-            if ("SHUTOFF".equals(sd.getStatus())) {
-                instances.add(sd.getId());
-            }
+        for (ServerDetail sd : details) {
+            instances.add(sd.getId());
         }
         try {
             if (!instances.isEmpty()) {
@@ -303,7 +342,9 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             }
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, e.getMessage());
+            result = false;
         }
+        return result;
     }
 
 
@@ -311,32 +352,35 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         List<String> serverIds = new ArrayList<>();
         EcsClient ecsClient = parent.getEcsClient();
         ShowJobRequest request = new ShowJobRequest();
+        int retryNum = 0;
+        int sleepTime = 2000;
         request.withJobId(jobID);
-        while (true) {
+        while (retryNum < 10) {
             ShowJobResponse response = ecsClient.showJob(request);
             ShowJobResponse.StatusEnum status = response.getStatus();
-            for (SubJob sj : response.getEntities().getSubJobs()) {
-                serverIds.add(sj.getEntities().getServerId());
+            if (response.getEntities() != null && response.getEntities().getSubJobs() != null) {
+                for (SubJob sj : response.getEntities().getSubJobs()) {
+                    serverIds.add(sj.getEntities().getServerId());
+                }
             }
-            if (status == ShowJobResponse.StatusEnum.INIT || status == ShowJobResponse.StatusEnum.RUNNING) {
-                if (serverIds.size() > 0) {
-                    break;
-                }
-                try {
-                    Thread.sleep(4000);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            } else {
+            if (serverIds.size() > 0 || status == ShowJobResponse.StatusEnum.FAIL || status == ShowJobResponse.StatusEnum.SUCCESS) {
                 break;
             }
+            try {
+                Thread.sleep(sleepTime);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            retryNum++;
+            sleepTime += 1000 * retryNum;
         }
 
         List<ServerDetail> instances = new ArrayList<>();
         if (serverIds.size() == 0) {
             return instances;
         }
-        for (String srvId : serverIds) {
+        for (
+                String srvId : serverIds) {
             try {
                 ServerDetail sd = getServerDetail(srvId);
                 instances.add(sd);
@@ -384,14 +428,16 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
 
         //setting key name
-        try {
-            NovaKeypair keyPair = this.getParent().getKeyPair();
-            if (keyPair != null) {
-                String name = keyPair.getName();
-                serverBody.withKeyName(name);
+        if (getParent().isAssociateHWCKeypair()) {
+            try {
+                NovaKeypair keyPair = getParent().getKeyPair();
+                if (keyPair != null) {
+                    String name = keyPair.getName();
+                    serverBody.withKeyName(name);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
 
         //set user data
@@ -408,11 +454,9 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         return response.getJobId();
     }
 
-    private List<ServerDetail> findOrphansOrStopInstance(List<ServerDetail> tplAllInstance, int number) {
+    private List<ServerDetail> findOrphansOrStopInstance(int number) {
+        List<ServerDetail> tplAllInstance = tplAllInstance();
         List<ServerDetail> orphans = new ArrayList<>();
-        if (tplAllInstance == null) {
-            return orphans;
-        }
         int count = 0;
         for (ServerDetail instance : tplAllInstance) {
             if (checkInstance(instance)) {
@@ -427,9 +471,29 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         return orphans;
     }
 
+    List<ECSAbstractSlave> availableInstanceAsSlave(int number) throws IOException {
+        List<ECSAbstractSlave> slaves = new ArrayList<>();
+        List<ServerDetail> orphans = new ArrayList<>();
+        List<ServerDetail> stopped = new ArrayList<>();
+        for (ServerDetail sd : findOrphansOrStopInstance(number)) {
+            if (VPCHelper.isShutdown(sd.getStatus())) {
+                stopped.add(sd);
+            } else {
+                orphans.add(sd);
+            }
+        }
+        if (stopped.size() > 0 && wakeUpInstance(stopped)) {
+            slaves.addAll(toSlaves(stopped));
+        }
+        if (orphans.size() > 0) {
+            slaves.addAll(toSlaves(orphans));
+        }
+        return slaves;
+    }
+
     private boolean checkInstance(ServerDetail instance) {
         for (ECSAbstractSlave node : NodeIterator.nodes(ECSAbstractSlave.class)) {
-            if (node.getInstanceId().equals(instance.getId()) && !"SHUTOFF".equals(instance.getStatus())) {
+            if (node.getInstanceId().equals(instance.getId()) && !VPCHelper.INSTANCE_STATE_SHUTOFF.equals(instance.getStatus())) {
                 return false;
             }
         }
@@ -442,7 +506,6 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             List<ECSAbstractSlave> slaves = new ArrayList<>(instances.size());
             for (ServerDetail instance : instances) {
                 slaves.add(newOnDemandSlave(instance));
-
             }
             return slaves;
         } catch (Descriptor.FormException e) {
@@ -474,6 +537,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
                 .withTmpDir(tmpDir)
                 .withRemoteAdmin(remoteAdmin)
                 .withIdleTerminationMinutes(idleTerminationMinutes)
+                .withOfflineTimeout(offlineTimeout)
                 .withTags(ECSTag.formInstanceTags(VPCHelper.getServerTags(instance.getId(), parent)))
                 .withCloudName(parent.name)
                 .withLaunchTimeout(getLaunchTimeout())
@@ -511,6 +575,10 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             instanceCap = Integer.MAX_VALUE;
         }
 
+        if (imgType == null) {
+            imgType = new DynamicImageData("");
+        }
+
         return this;
     }
 
@@ -531,10 +599,11 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         return Jenkins.get().getDescriptor(getClass());
     }
 
+
     private static PostPaidServer genPostPaidServer(int needCreateCount, String zone, String flavorID, String imgID,
                                                     String vpcId, String description) {
         PostPaidServer serverBody = new PostPaidServer();
-        String name = VPCHelper.genSlaveNamePrefix(description, flavorID, imgID) + getUUID8();
+        String name = VPCHelper.genSlaveNamePrefix(description, flavorID) + getUUID8();
         serverBody.withAvailabilityZone(zone)
                 .withCount(needCreateCount)
                 .withFlavorRef(flavorID)
@@ -616,9 +685,36 @@ public class ECSTemplate implements Describable<ECSTemplate> {
 
     @Extension
     public static final class DescriptorImpl extends Descriptor<ECSTemplate> {
+
         @Override
         public String getDisplayName() {
             return "";
+        }
+
+        public List<Descriptor<ImageTypeData>> getImageTypeDescriptors() {
+            return Jenkins.get().getDescriptorList(ImageTypeData.class);
+        }
+
+        private VPC getCurVpc(String vpcID) {
+            VPC curVpc = null;
+            for (Cloud c : Jenkins.get().clouds) {
+                if (c instanceof VPC) {
+                    VPC vpc = (VPC) c;
+                    if (vpc.getVpcID().equals(vpcID)) {
+                        curVpc = vpc;
+                        break;
+                    }
+                }
+            }
+            return curVpc;
+        }
+
+        public FormValidation doCheckDescription(@QueryParameter String description) {
+            Jenkins.get().hasPermission(Jenkins.ADMINISTER);
+            if (Util.fixEmptyAndTrim(description) == null) {
+                return FormValidation.error("no set template desc");
+            }
+            return FormValidation.ok();
         }
 
         public FormValidation doCheckFlavorID(@QueryParameter String flavorID) {
@@ -689,14 +785,6 @@ public class ECSTemplate implements Describable<ECSTemplate> {
                 LOGGER.log(Level.INFO, e.getMessage());
             }
             return FormValidation.error("Minimum number of instances must be a non-negative integer (or null)");
-        }
-
-        public FormValidation doCheckImgID(@QueryParameter String imgID) {
-            Jenkins.get().hasPermission(Jenkins.ADMINISTER);
-            if (Util.fixEmptyAndTrim(imgID) == null) {
-                return FormValidation.error(Messages.TPL_NoSetImageID());
-            }
-            return FormValidation.ok();
         }
 
         public FormValidation doCheckRvSizeStr(@QueryParameter String rvSizeStr) {
@@ -800,21 +888,44 @@ public class ECSTemplate implements Describable<ECSTemplate> {
 
         @RequirePOST
         public FormValidation doTestCreateEcs(@QueryParameter String region, @QueryParameter String credentialsId,
-                                              @QueryParameter String description, @QueryParameter String imgID,
-                                              @QueryParameter String flavorID, @QueryParameter String zone,
-                                              @QueryParameter String vpcID, @QueryParameter VolumeType rootVolumeType,
-                                              @QueryParameter VolumeType dvType, @QueryParameter String rvSizeStr,
-                                              @QueryParameter boolean associateEIP, @QueryParameter String subnetIDs,
-                                              @QueryParameter String dvSize, @QueryParameter String mountQuantity,
-                                              @QueryParameter boolean mountDV) {
+                                              @QueryParameter String description, @QueryParameter String flavorID,
+                                              @QueryParameter String zone, @QueryParameter String vpcID,
+                                              @QueryParameter VolumeType rootVolumeType, @QueryParameter VolumeType dvType,
+                                              @QueryParameter String rvSizeStr, @QueryParameter boolean associateEIP,
+                                              @QueryParameter String subnetIDs, @QueryParameter String dvSize,
+                                              @QueryParameter String mountQuantity, @QueryParameter boolean mountDV) {
             checkPermission(VPC.PROVISION);
-            if (StringUtils.isEmpty(region) || StringUtils.isEmpty(credentialsId) || StringUtils.isEmpty(imgID) ||
-                    StringUtils.isEmpty(flavorID) || StringUtils.isEmpty(zone)) {
+
+            if (StringUtils.isEmpty(vpcID) || StringUtils.isEmpty(description) ||
+                    StringUtils.isEmpty(region) || StringUtils.isEmpty(credentialsId) ||
+                    StringUtils.isEmpty(flavorID) || StringUtils.isEmpty(zone) ||
+                    StringUtils.isBlank(subnetIDs)) {
                 return FormValidation.error(Messages.HuaweiECSCloud_ErrorConfig());
             }
+            VPC curVpc = getCurVpc(vpcID);
+            String imgID = "";
+            if (curVpc != null) {
+                ECSTemplate tmp = curVpc.getTemplate(description);
+                if (tmp != null) {
+                    if (tmp.imgType.isDynamicType()) {
+                        ImsClient client = VPC.createImsClient(region, credentialsId);
+                        String tag = ((DynamicImageData) tmp.imgType).getImgTag();
+                        try {
+                            imgID = VPCHelper.getImageIDByTag(client, tag);
+                        } catch (Exception e) {
+                            LOGGER.info(e.getMessage());
+                        }
+                    } else {
+                        imgID = ((StaticImageData) tmp.imgType).getImageId();
+                    }
+                } else {
+                    return FormValidation.error(Messages.TPL_NotApplyModify());
+                }
 
-            if (StringUtils.isBlank(subnetIDs)) {
-                return FormValidation.error(Messages.HuaweiECSCloud_ErrorConfig());
+            }
+
+            if (Util.fixEmptyAndTrim(imgID) == null) {
+                return FormValidation.error(Messages.TPL_CantGetImgID());
             }
 
             PostPaidServer serverBody = genPostPaidServer(1, zone, flavorID,
@@ -859,6 +970,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
                 return FormValidation.error(e.getMessage());
             }
         }
+
     }
 
     private static String getUUID8() {

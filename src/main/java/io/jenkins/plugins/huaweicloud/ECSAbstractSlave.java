@@ -15,6 +15,7 @@ import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
 import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.kohsuke.stapler.StaplerRequest;
 
 import java.io.IOException;
@@ -38,6 +39,7 @@ public abstract class ECSAbstractSlave extends Slave {
     public List<ECSTag> tags;
     public final String cloudName;
     public final String idleTerminationMinutes;
+    public final String offlineTimeout;
     public final boolean stopOnTerminate;
     public transient String slaveCommandPrefix;
 
@@ -67,7 +69,7 @@ public abstract class ECSAbstractSlave extends Slave {
                             List<ECSTag> tags, String cloudName, String idleTerminationMinutes,
                             ComputerLauncher launcher, int launchTimeout, String initScript,
                             String tmpDir, RetentionStrategy<ECSComputer> retentionStrategy,
-                            boolean stopOnTerminate) throws Descriptor.FormException, IOException {
+                            boolean stopOnTerminate, String offlineTimeout) throws Descriptor.FormException, IOException {
         super(name, remoteFS, launcher);
         setNumExecutors(numExecutors);
         setMode(mode);
@@ -84,7 +86,18 @@ public abstract class ECSAbstractSlave extends Slave {
         this.idleTerminationMinutes = idleTerminationMinutes;
         this.launchTimeout = launchTimeout;
         this.stopOnTerminate = stopOnTerminate;
+        this.offlineTimeout = offlineTimeout;
         readResolve();
+    }
+
+    public long getOfflineTimeoutMills() {
+        long offlineTimeoutMinutes = 720;
+        try {
+            offlineTimeoutMinutes = Integer.parseInt(this.offlineTimeout.trim());
+        } catch (Exception e) {
+            LOGGER.info(e.getMessage());
+        }
+        return TimeUnit.MINUTES.toMillis(offlineTimeoutMinutes);
     }
 
     @Override
@@ -168,7 +181,7 @@ public abstract class ECSAbstractSlave extends Slave {
     }
 
     String getRootCommandPrefix() {
-        return "";
+        return "sudo";
     }
 
     String getSlaveCommandPrefix() {
@@ -209,19 +222,10 @@ public abstract class ECSAbstractSlave extends Slave {
         if (StringUtils.isEmpty(getInstanceId())) {
             return;
         }
-        ServerDetail instance;
-        try {
-            instance = VPCHelper.getInstanceWithRetry(getInstanceId(), getCloud());
-        } catch (InterruptedException e) {
-            LOGGER.fine("InterruptedException while get " + getInstanceId()
-                    + " Exception: " + e);
-            return;
-        }
+        ServerDetail instance = getServerDetail();
+        if (instance == null) return;
         lastFetchTime = now;
         lastFetchInstance = instance;
-        if (instance == null) {
-            return;
-        }
         createdTime = TimeUtils.dateStrToLong(instance.getCreated());
         try {
             List<ServerTag> serverTags = VPCHelper.getServerTags(getInstanceId(), getCloud());
@@ -238,15 +242,21 @@ public abstract class ECSAbstractSlave extends Slave {
 
     }
 
-    protected void clearLiveInstanceData() throws SdkException {
-        ServerDetail instance;
+    @Nullable
+    private ServerDetail getServerDetail() {
+        ServerDetail instance = null;
         try {
             instance = VPCHelper.getInstanceWithRetry(getInstanceId(), getCloud());
         } catch (InterruptedException e) {
             LOGGER.fine("InterruptedException while get " + getInstanceId()
                     + " Exception: " + e);
-            return;
         }
+        return instance;
+    }
+
+    protected void clearLiveInstanceData() throws SdkException {
+        ServerDetail instance = getServerDetail();
+        if (instance == null) return;
         List<ServerTag> serverTags = VPCHelper.getServerTags(instance.getId(), getCloud());
         if (!serverTags.isEmpty()) {
             VPCHelper.deleteServerTags(getInstanceId(), serverTags, getCloud());
@@ -254,15 +264,9 @@ public abstract class ECSAbstractSlave extends Slave {
     }
 
     protected void pushLiveInstanceData() throws SdkException {
-        ServerDetail instance;
-        try {
-            instance = VPCHelper.getInstanceWithRetry(getInstanceId(), getCloud());
-        } catch (InterruptedException e) {
-            LOGGER.fine("InterruptedException while get " + getInstanceId()
-                    + " Exception: " + e);
-            return;
-        }
-        if (instance != null && tags != null && !tags.isEmpty()) {
+        ServerDetail instance = getServerDetail();
+        if (instance == null) return;
+        if (tags != null && !tags.isEmpty()) {
             List<ServerTag> srvTags = new ArrayList<>();
             for (ECSTag tag : tags) {
                 srvTags.add(new ServerTag().withKey(tag.getName()).withValue(tag.getValue()));
@@ -303,10 +307,28 @@ public abstract class ECSAbstractSlave extends Slave {
 
     void idleTimeout() {
         LOGGER.info("ECS instance idle time expired: " + getInstanceId());
-        if (!stopOnTerminate)
-            terminate();
-        else
+        if (stopOnTerminate && !imgHasChanged()) {
             stop();
+            return;
+        }
+        terminate();
+    }
+
+    private boolean imgHasChanged() {
+        ServerDetail instance = getServerDetail();
+        if (instance == null) {
+            return false;
+        }
+        ECSTemplate tmp = getCloud().getTemplate(templateDescription);
+        if (tmp == null) {
+            return false;
+        }
+        String insImgId = instance.getImage().getId();
+        String tmpImgId = tmp.getImgID();
+        if (StringUtils.isEmpty(insImgId) || StringUtils.isEmpty(tmpImgId)) {
+            return false;
+        }
+        return !insImgId.equals(tmpImgId);
     }
 
     private void stop() {

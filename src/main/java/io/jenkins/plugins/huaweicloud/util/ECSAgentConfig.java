@@ -20,6 +20,7 @@ public abstract class ECSAgentConfig {
     final List<ECSTag> tags;
     final String cloudName;
     final String idleTerminationMinutes;
+    final String offlineTimeout;
     final int launchTimeout;
 
     private ECSAgentConfig(Builder<? extends Builder, ? extends ECSAgentConfig> builder) {
@@ -34,6 +35,7 @@ public abstract class ECSAgentConfig {
         this.nodeProperties = builder.nodeProperties;
         this.remoteAdmin = builder.remoteAdmin;
         this.idleTerminationMinutes = builder.idleTerminationMinutes;
+        this.offlineTimeout = builder.offlineTimeout;
         this.tags = builder.tags;
         this.cloudName = builder.cloudName;
         this.launchTimeout = builder.launchTimeout;
@@ -63,6 +65,7 @@ public abstract class ECSAgentConfig {
         private List<? extends NodeProperty<?>> nodeProperties;
         private String remoteAdmin;
         private String idleTerminationMinutes;
+        private String offlineTimeout;
         private List<ECSTag> tags;
         private String cloudName;
         private int launchTimeout;
@@ -124,6 +127,11 @@ public abstract class ECSAgentConfig {
 
         public B withIdleTerminationMinutes(String idleTerminationMinutes) {
             this.idleTerminationMinutes = idleTerminationMinutes;
+            return self();
+        }
+
+        public B withOfflineTimeout(String offlineTimeout) {
+            this.offlineTimeout = offlineTimeout;
             return self();
         }
 

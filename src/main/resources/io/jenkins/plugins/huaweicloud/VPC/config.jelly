@@ -3,7 +3,7 @@
          xmlns:t="/lib/hudson" xmlns:f="/lib/form">
     <st:include class="${descriptor.clazz}" page="config-entries.jelly"/>
     <f:entry title="${%ECSTs}" description="${%ECSTs-DESC}">
-        <f:repeatable field="templates">
+        <f:repeatable field="templates" items="${instance.templates}">
             <st:include page="config.jelly" class="${descriptor.clazz}"/>
         </f:repeatable>
     </f:entry>
