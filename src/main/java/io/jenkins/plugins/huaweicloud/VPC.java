@@ -16,6 +16,8 @@ import com.huaweicloud.sdk.eip.v2.EipClient;
 import com.huaweicloud.sdk.eip.v2.region.EipRegion;
 import com.huaweicloud.sdk.iam.v3.IamClient;
 import com.huaweicloud.sdk.iam.v3.region.IamRegion;
+import com.huaweicloud.sdk.ims.v2.ImsClient;
+import com.huaweicloud.sdk.ims.v2.region.ImsRegion;
 import hudson.Util;
 import hudson.model.*;
 import hudson.security.ACL;
@@ -437,7 +439,7 @@ public abstract class VPC extends Cloud {
 
     private int getPossibleNewSlavesCount(ECSTemplate t) {
         List<ServerDetail> allInstances = VPCHelper.getAllOfServerList(this);
-        List<ServerDetail> tmpInstance = VPCHelper.getAllOfServerByTmp(t);
+        List<ServerDetail> tmpInstance = VPCHelper.getAllOfAvailableServerByTmp(t);
         int availableTotalSlave = instanceCap - allInstances.size();
         int availableTmpSlave = t.getInstanceCap() - tmpInstance.size();
         LOGGER.log(Level.FINE, "Available Total Slaves: " + availableTotalSlave + " Available AMI slaves: " + availableTmpSlave
@@ -509,7 +511,15 @@ public abstract class VPC extends Cloud {
         ICredential auth = createBasicCredential(credentialsId);
         return EipClient.newBuilder()
                 .withCredential(auth)
-                .withRegion(EipRegion.valueOf("cn-south-1"))
+                .withRegion(EipRegion.valueOf(region))
+                .build();
+    }
+
+    public static ImsClient createImsClient(String region, String credentialsId) {
+        ICredential auth = createBasicCredential(credentialsId);
+        return ImsClient.newBuilder()
+                .withCredential(auth)
+                .withRegion(ImsRegion.valueOf(region))
                 .build();
     }
 
@@ -542,7 +552,6 @@ public abstract class VPC extends Cloud {
             for (Cloud c : Jenkins.get().clouds) {
                 if (c instanceof VPC) {
                     VPC vpc = (VPC) c;
-
                     if (vpc.getVpcID() != null && vpc.getVpcID().equals(value)) {
                         found++;
                     }

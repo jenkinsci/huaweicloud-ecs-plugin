@@ -3,12 +3,14 @@ package io.jenkins.plugins.huaweicloud;
 import com.huaweicloud.sdk.core.exception.SdkException;
 import com.huaweicloud.sdk.ecs.v2.EcsClient;
 import com.huaweicloud.sdk.ecs.v2.model.*;
+import com.huaweicloud.sdk.ims.v2.ImsClient;
 import hudson.Extension;
 import hudson.RelativePath;
 import hudson.Util;
 import hudson.model.*;
 import hudson.model.labels.LabelAtom;
 import hudson.security.Permission;
+import hudson.slaves.Cloud;
 import hudson.slaves.NodeProperty;
 import hudson.slaves.NodePropertyDescriptor;
 import hudson.util.DescribableList;
@@ -20,9 +22,7 @@ import io.jenkins.plugins.huaweicloud.util.VPCHelper;
 import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
 import org.apache.commons.lang.StringUtils;
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.QueryParameter;
-import org.kohsuke.stapler.Stapler;
+import org.kohsuke.stapler.*;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import java.io.IOException;
@@ -38,7 +38,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     private final static Logger LOGGER = Logger.getLogger(ECSTemplate.class.getName());
     public final String description;
     protected transient VPC parent;
-    private String imgID;
+    //private String imgID;
     private final String flavorID;
     private final String zone;
     public final String labels;
@@ -55,6 +55,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     public final String initScript;
     public final String tmpDir;
     public int launchTimeout;
+    public ImageTypeData imgType;
     private final boolean associateEIP;
     public static final String srvNamePrefix = "JenkinsHWCSlave_";
     private /* lazily initialized */ DescribableList<NodeProperty<?>, NodePropertyDescriptor> nodeProperties;
@@ -70,13 +71,14 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     public String mountQuantity;
 
     @DataBoundConstructor
-    public ECSTemplate(String description, String imgID, String flavorID,
+    public ECSTemplate(String description, String flavorID,
                        String zone, String labelString, Node.Mode mode, String remoteAdmin,
                        String subnetIDs, VolumeType rootVolumeType, VolumeType dvType, String remoteFS,
                        String rvSizeStr, List<ECSTag> tags, String numExecutors,
                        String idleTerminationMinutes, String launchTimeoutStr, String initScript, String tmpDir,
                        List<? extends NodeProperty<?>> nodeProperties, int minimumNumberOfInstances, boolean associateEIP,
-                       boolean stopOnTerminate, String userData, String instanceCapStr, boolean mountDV, String dvSize, String mountQuantity) {
+                       boolean stopOnTerminate, String userData, String instanceCapStr, boolean mountDV, String dvSize,
+                       String mountQuantity, ImageTypeData imgType) {
         if (StringUtils.isNotBlank(remoteAdmin) || StringUtils.isNotBlank(tmpDir)) {
             LOGGER.log(Level.FINE, "As remoteAdmin or tmpDir is not blank, we must ensure the user has ADMINISTER rights.");
             // Can be null during tests
@@ -88,7 +90,6 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         this.dvSize = dvSize;
         this.associateEIP = associateEIP;
         this.description = description;
-        this.imgID = imgID;
         this.flavorID = flavorID;
         this.zone = zone;
         this.labels = Util.fixNull(labelString);
@@ -102,8 +103,11 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         this.remoteAdmin = remoteAdmin;
         this.initScript = initScript;
         this.tmpDir = tmpDir;
-        if (StringUtils.isNotEmpty(rvSizeStr)) {
+
+        try {
             this.rvSize = Integer.parseInt(rvSizeStr);
+        } catch (NumberFormatException e) {
+            LOGGER.log(Level.FINE, e.getMessage());
         }
         this.tags = tags;
         this.idleTerminationMinutes = idleTerminationMinutes;
@@ -113,18 +117,28 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             this.launchTimeout = Integer.MAX_VALUE;
         }
 
-        if (null == instanceCapStr || instanceCapStr.isEmpty()) {
-            this.instanceCap = Integer.MAX_VALUE;
-        } else {
+        try {
             this.instanceCap = Integer.parseInt(instanceCapStr);
+        } catch (NumberFormatException e) {
+            this.instanceCap = Integer.MAX_VALUE;
         }
+
 
         this.nodeProperties = new DescribableList<>(Saveable.NOOP, Util.fixNull(nodeProperties));
         this.minimumNumberOfInstances = minimumNumberOfInstances;
         this.stopOnTerminate = stopOnTerminate;
         this.userData = StringUtils.trimToEmpty(userData);
         this.mountQuantity = mountQuantity;
+        this.imgType = imgType;
         readResolve();
+    }
+
+    public ImageTypeData getImgType() {
+        return imgType;
+    }
+
+    public void setImgType(ImageTypeData imgType) {
+        this.imgType = imgType;
     }
 
     public boolean isMountDV() {
@@ -166,11 +180,19 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     }
 
     public String getImgID() {
+        String imgID = "";
+        if (imgType.isDynamicType()) {
+            try {
+                ImsClient imsClient = VPC.createImsClient(getParent().getRegion(), getParent().getCredentialsId());
+                String tag = ((DynamicImageData) imgType).getImgTag();
+                imgID = VPCHelper.getImageIDByTag(imsClient, tag);
+            } catch (Exception e) {
+                LOGGER.info(e.getMessage());
+            }
+        } else {
+            imgID = ((StaticImageData) imgType).getImageId();
+        }
         return imgID;
-    }
-
-    public void setAmi(String imgID) {
-        this.imgID = imgID;
     }
 
     public int getMinimumNumberOfInstances() {
@@ -311,32 +333,35 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         List<String> serverIds = new ArrayList<>();
         EcsClient ecsClient = parent.getEcsClient();
         ShowJobRequest request = new ShowJobRequest();
+        int retryNum = 0;
+        int sleepTime = 2000;
         request.withJobId(jobID);
-        while (true) {
+        while (retryNum < 10) {
             ShowJobResponse response = ecsClient.showJob(request);
             ShowJobResponse.StatusEnum status = response.getStatus();
-            for (SubJob sj : response.getEntities().getSubJobs()) {
-                serverIds.add(sj.getEntities().getServerId());
+            if (response.getEntities() != null && response.getEntities().getSubJobs() != null) {
+                for (SubJob sj : response.getEntities().getSubJobs()) {
+                    serverIds.add(sj.getEntities().getServerId());
+                }
             }
-            if (status == ShowJobResponse.StatusEnum.INIT || status == ShowJobResponse.StatusEnum.RUNNING) {
-                if (serverIds.size() > 0) {
-                    break;
-                }
-                try {
-                    Thread.sleep(4000);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            } else {
+            if (serverIds.size() > 0 || status == ShowJobResponse.StatusEnum.FAIL || status == ShowJobResponse.StatusEnum.SUCCESS) {
                 break;
             }
+            try {
+                Thread.sleep(sleepTime);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            retryNum++;
+            sleepTime += 1000 * retryNum;
         }
 
         List<ServerDetail> instances = new ArrayList<>();
         if (serverIds.size() == 0) {
             return instances;
         }
-        for (String srvId : serverIds) {
+        for (
+                String srvId : serverIds) {
             try {
                 ServerDetail sd = getServerDetail(srvId);
                 instances.add(sd);
@@ -511,6 +536,10 @@ public class ECSTemplate implements Describable<ECSTemplate> {
             instanceCap = Integer.MAX_VALUE;
         }
 
+        if (imgType == null) {
+            imgType = new DynamicImageData("");
+        }
+
         return this;
     }
 
@@ -531,10 +560,16 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         return Jenkins.get().getDescriptor(getClass());
     }
 
+    public String genTmpImproveInfo() {
+        return description + flavorID + zone + labels + mode + rootVolumeType
+                + subnetIDs + associateEIP + remoteFS + remoteAdmin + tmpDir + numExecutors
+                + instanceCap + idleTerminationMinutes + launchTimeout + stopOnTerminate + minimumNumberOfInstances;
+    }
+
     private static PostPaidServer genPostPaidServer(int needCreateCount, String zone, String flavorID, String imgID,
                                                     String vpcId, String description) {
         PostPaidServer serverBody = new PostPaidServer();
-        String name = VPCHelper.genSlaveNamePrefix(description, flavorID, imgID) + getUUID8();
+        String name = VPCHelper.genSlaveNamePrefix(description, flavorID) + getUUID8();
         serverBody.withAvailabilityZone(zone)
                 .withCount(needCreateCount)
                 .withFlavorRef(flavorID)
@@ -616,9 +651,79 @@ public class ECSTemplate implements Describable<ECSTemplate> {
 
     @Extension
     public static final class DescriptorImpl extends Descriptor<ECSTemplate> {
+
         @Override
         public String getDisplayName() {
             return "";
+        }
+
+        public List<Descriptor<ImageTypeData>> getImageTypeDescriptors() {
+            return Jenkins.get().getDescriptorList(ImageTypeData.class);
+        }
+
+        private VPC getCurVpc(String vpcID) {
+            VPC curVpc = null;
+            for (Cloud c : Jenkins.get().clouds) {
+                if (c instanceof VPC) {
+                    VPC vpc = (VPC) c;
+                    if (vpc.getVpcID().equals(vpcID)) {
+                        curVpc = vpc;
+                        break;
+                    }
+                }
+            }
+            return curVpc;
+        }
+
+        private boolean isDescriptionRepeat(VPC vpc, String description, String uniqueInfo) {
+            List<ECSTemplate> templates = vpc.getTemplates();
+            int found = 0;
+            for (ECSTemplate template : templates) {
+                String tmpImproveInfo = template.genTmpImproveInfo();
+                if (description.equals(template.description) && !uniqueInfo.equals(tmpImproveInfo)) {
+                    found++;
+                }
+                LOGGER.info(uniqueInfo);
+                LOGGER.info(tmpImproveInfo);
+            }
+            return found > 0;
+        }
+
+        public FormValidation doCheckDescription(@QueryParameter String description, @QueryParameter String flavorID,
+                                                 @QueryParameter String zone, @QueryParameter String labelString,
+                                                 @QueryParameter Node.Mode mode, @QueryParameter String rootVolumeType,
+                                                 @QueryParameter String subnetIDs, @QueryParameter String associateEIP,
+                                                 @QueryParameter String remoteFS, @QueryParameter String remoteAdmin,
+                                                 @QueryParameter String tmpDir, @QueryParameter String numExecutors,
+                                                 @QueryParameter String idleTerminationMinutes, @QueryParameter String instanceCapStr,
+                                                 @QueryParameter String launchTimeoutStr, @QueryParameter boolean stopOnTerminate,
+                                                 @QueryParameter String minimumNumberOfInstances, @RelativePath("..") @QueryParameter String vpcID) {
+            Jenkins.get().hasPermission(Jenkins.ADMINISTER);
+            if (Util.fixEmptyAndTrim(description) == null) {
+                return FormValidation.error("no set template desc");
+            }
+            int instanceCap = Integer.MAX_VALUE;
+            try {
+                instanceCap = Integer.parseInt(instanceCapStr);
+            } catch (NumberFormatException e) {
+                e.printStackTrace();
+            }
+            int launchTimeout;
+            try {
+                launchTimeout = Integer.parseInt(launchTimeoutStr);
+            } catch (NumberFormatException nfe) {
+                launchTimeout = Integer.MAX_VALUE;
+            }
+
+            String tmpImproveInfo = description + flavorID + zone + Util.fixNull(labelString) + mode + rootVolumeType
+                    + subnetIDs + associateEIP + remoteFS + remoteAdmin + tmpDir + Util.fixNull(numExecutors).trim()
+                    + instanceCap + idleTerminationMinutes + launchTimeout + stopOnTerminate + minimumNumberOfInstances;
+            VPC curVpc = getCurVpc(vpcID);
+
+            if (curVpc != null && isDescriptionRepeat(curVpc, description, tmpImproveInfo)) {
+                return FormValidation.error(Messages.TPL_DuplicatedDesc());
+            }
+            return FormValidation.ok();
         }
 
         public FormValidation doCheckFlavorID(@QueryParameter String flavorID) {
@@ -689,14 +794,6 @@ public class ECSTemplate implements Describable<ECSTemplate> {
                 LOGGER.log(Level.INFO, e.getMessage());
             }
             return FormValidation.error("Minimum number of instances must be a non-negative integer (or null)");
-        }
-
-        public FormValidation doCheckImgID(@QueryParameter String imgID) {
-            Jenkins.get().hasPermission(Jenkins.ADMINISTER);
-            if (Util.fixEmptyAndTrim(imgID) == null) {
-                return FormValidation.error(Messages.TPL_NoSetImageID());
-            }
-            return FormValidation.ok();
         }
 
         public FormValidation doCheckRvSizeStr(@QueryParameter String rvSizeStr) {
@@ -800,21 +897,44 @@ public class ECSTemplate implements Describable<ECSTemplate> {
 
         @RequirePOST
         public FormValidation doTestCreateEcs(@QueryParameter String region, @QueryParameter String credentialsId,
-                                              @QueryParameter String description, @QueryParameter String imgID,
-                                              @QueryParameter String flavorID, @QueryParameter String zone,
-                                              @QueryParameter String vpcID, @QueryParameter VolumeType rootVolumeType,
-                                              @QueryParameter VolumeType dvType, @QueryParameter String rvSizeStr,
-                                              @QueryParameter boolean associateEIP, @QueryParameter String subnetIDs,
-                                              @QueryParameter String dvSize, @QueryParameter String mountQuantity,
-                                              @QueryParameter boolean mountDV) {
+                                              @QueryParameter String description, @QueryParameter String flavorID,
+                                              @QueryParameter String zone, @QueryParameter String vpcID,
+                                              @QueryParameter VolumeType rootVolumeType, @QueryParameter VolumeType dvType,
+                                              @QueryParameter String rvSizeStr, @QueryParameter boolean associateEIP,
+                                              @QueryParameter String subnetIDs, @QueryParameter String dvSize,
+                                              @QueryParameter String mountQuantity, @QueryParameter boolean mountDV) {
             checkPermission(VPC.PROVISION);
-            if (StringUtils.isEmpty(region) || StringUtils.isEmpty(credentialsId) || StringUtils.isEmpty(imgID) ||
-                    StringUtils.isEmpty(flavorID) || StringUtils.isEmpty(zone)) {
+
+            if (StringUtils.isEmpty(vpcID) || StringUtils.isEmpty(description) ||
+                    StringUtils.isEmpty(region) || StringUtils.isEmpty(credentialsId) ||
+                    StringUtils.isEmpty(flavorID) || StringUtils.isEmpty(zone) ||
+                    StringUtils.isBlank(subnetIDs)) {
                 return FormValidation.error(Messages.HuaweiECSCloud_ErrorConfig());
             }
+            VPC curVpc = getCurVpc(vpcID);
+            String imgID = "";
+            if (curVpc != null) {
+                ECSTemplate tmp = curVpc.getTemplate(description);
+                if (tmp != null) {
+                    if (tmp.imgType.isDynamicType()) {
+                        ImsClient client = VPC.createImsClient(region, credentialsId);
+                        String tag = ((DynamicImageData) tmp.imgType).getImgTag();
+                        try {
+                            imgID = VPCHelper.getImageIDByTag(client, tag);
+                        } catch (Exception e) {
+                            LOGGER.info(e.getMessage());
+                        }
+                    } else {
+                        imgID = ((StaticImageData) tmp.imgType).getImageId();
+                    }
+                } else {
+                    return FormValidation.error(Messages.TPL_NotApplyModify());
+                }
 
-            if (StringUtils.isBlank(subnetIDs)) {
-                return FormValidation.error(Messages.HuaweiECSCloud_ErrorConfig());
+            }
+
+            if (Util.fixEmptyAndTrim(imgID) == null) {
+                return FormValidation.error(Messages.TPL_CantGetImgID());
             }
 
             PostPaidServer serverBody = genPostPaidServer(1, zone, flavorID,
@@ -859,6 +979,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
                 return FormValidation.error(e.getMessage());
             }
         }
+
     }
 
     private static String getUUID8() {
