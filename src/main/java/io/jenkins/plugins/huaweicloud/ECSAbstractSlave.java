@@ -38,6 +38,7 @@ public abstract class ECSAbstractSlave extends Slave {
     public List<ECSTag> tags;
     public final String cloudName;
     public final String idleTerminationMinutes;
+    public final String offlineTimeout;
     public final boolean stopOnTerminate;
     public transient String slaveCommandPrefix;
 
@@ -67,7 +68,7 @@ public abstract class ECSAbstractSlave extends Slave {
                             List<ECSTag> tags, String cloudName, String idleTerminationMinutes,
                             ComputerLauncher launcher, int launchTimeout, String initScript,
                             String tmpDir, RetentionStrategy<ECSComputer> retentionStrategy,
-                            boolean stopOnTerminate) throws Descriptor.FormException, IOException {
+                            boolean stopOnTerminate, String offlineTimeout) throws Descriptor.FormException, IOException {
         super(name, remoteFS, launcher);
         setNumExecutors(numExecutors);
         setMode(mode);
@@ -84,7 +85,18 @@ public abstract class ECSAbstractSlave extends Slave {
         this.idleTerminationMinutes = idleTerminationMinutes;
         this.launchTimeout = launchTimeout;
         this.stopOnTerminate = stopOnTerminate;
+        this.offlineTimeout = offlineTimeout;
         readResolve();
+    }
+
+    public long getOfflineTimeoutMills() {
+        long offlineTimeoutMinutes = 720;
+        try {
+            offlineTimeoutMinutes = Integer.parseInt(this.offlineTimeout.trim());
+        } catch (Exception e) {
+            LOGGER.info(e.getMessage());
+        }
+        return TimeUnit.MINUTES.toMillis(offlineTimeoutMinutes);
     }
 
     @Override

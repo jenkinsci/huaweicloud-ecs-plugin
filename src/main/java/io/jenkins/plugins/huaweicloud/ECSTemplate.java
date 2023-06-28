@@ -52,6 +52,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
     public final String remoteFS;
     public final String remoteAdmin;
     public final String idleTerminationMinutes;
+    public final String offlineTimeout;
     public final String initScript;
     public final String tmpDir;
     public int launchTimeout;
@@ -74,7 +75,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
                        String zone, String labelString, Node.Mode mode, String remoteAdmin,
                        String subnetIDs, VolumeType rootVolumeType, VolumeType dvType, String remoteFS,
                        String rvSizeStr, List<ECSTag> tags, String numExecutors,
-                       String idleTerminationMinutes, String launchTimeoutStr, String initScript, String tmpDir,
+                       String idleTerminationMinutes, String offlineTimeout, String launchTimeoutStr, String initScript, String tmpDir,
                        List<? extends NodeProperty<?>> nodeProperties, int minimumNumberOfInstances, boolean associateEIP,
                        boolean stopOnTerminate, String userData, String instanceCapStr, boolean mountDV, String dvSize, String mountQuantity) {
         if (StringUtils.isNotBlank(remoteAdmin) || StringUtils.isNotBlank(tmpDir)) {
@@ -107,6 +108,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
         this.tags = tags;
         this.idleTerminationMinutes = idleTerminationMinutes;
+        this.offlineTimeout = offlineTimeout;
         try {
             this.launchTimeout = Integer.parseInt(launchTimeoutStr);
         } catch (NumberFormatException nfe) {
@@ -384,14 +386,16 @@ public class ECSTemplate implements Describable<ECSTemplate> {
         }
 
         //setting key name
-        try {
-            NovaKeypair keyPair = this.getParent().getKeyPair();
-            if (keyPair != null) {
-                String name = keyPair.getName();
-                serverBody.withKeyName(name);
+        if (getParent().isAssociateHWCKeypair()) {
+            try {
+                NovaKeypair keyPair = getParent().getKeyPair();
+                if (keyPair != null) {
+                    String name = keyPair.getName();
+                    serverBody.withKeyName(name);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
 
         //set user data
@@ -474,6 +478,7 @@ public class ECSTemplate implements Describable<ECSTemplate> {
                 .withTmpDir(tmpDir)
                 .withRemoteAdmin(remoteAdmin)
                 .withIdleTerminationMinutes(idleTerminationMinutes)
+                .withOfflineTimeout(offlineTimeout)
                 .withTags(ECSTag.formInstanceTags(VPCHelper.getServerTags(instance.getId(), parent)))
                 .withCloudName(parent.name)
                 .withLaunchTimeout(getLaunchTimeout())

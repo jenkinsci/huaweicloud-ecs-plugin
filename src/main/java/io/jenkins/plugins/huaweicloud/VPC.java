@@ -54,6 +54,7 @@ public abstract class VPC extends Cloud {
     private static final Logger LOGGER = Logger.getLogger(VPC.class.getName());
     private final String credentialsId;
     private final String sshKeysCredentialsId;
+    private final boolean associateHWCKeypair;
     private final String vpcID;
     private String region;
     private final int instanceCap;
@@ -63,12 +64,12 @@ public abstract class VPC extends Cloud {
     private transient ReentrantLock slaveCountingLock = new ReentrantLock();
 
     protected VPC(String id, @CheckForNull String credentialsId, @CheckForNull String sshKeysCredentialsId, String instanceCapStr,
-                  String vpcID, List<? extends ECSTemplate> templates) {
+                  String vpcID, boolean associateHWCKeypair, List<? extends ECSTemplate> templates) {
         super(id);
         this.credentialsId = credentialsId;
         this.sshKeysCredentialsId = sshKeysCredentialsId;
         this.vpcID = vpcID;
-
+        this.associateHWCKeypair = associateHWCKeypair;
         if (instanceCapStr == null || instanceCapStr.isEmpty()) {
             this.instanceCap = Integer.MAX_VALUE;
         } else {
@@ -90,6 +91,10 @@ public abstract class VPC extends Cloud {
 
     public String getRegion() {
         return region;
+    }
+
+    public boolean isAssociateHWCKeypair() {
+        return associateHWCKeypair;
     }
 
     @DataBoundSetter
@@ -190,7 +195,7 @@ public abstract class VPC extends Cloud {
         if (sshKeysCredentialsId != null) {
             SSHUserPrivateKey privateKeyCredential = getSshCredential(sshKeysCredentialsId);
             if (privateKeyCredential != null) {
-                return new ECSPrivateKey(privateKeyCredential.getPrivateKey(), privateKeyCredential.getId(), getEcsClient());
+                return new ECSPrivateKey(privateKeyCredential, this.associateHWCKeypair, getEcsClient());
             }
         }
         return null;
@@ -612,7 +617,7 @@ public abstract class VPC extends Cloud {
             return FormValidation.ok();
         }
 
-        protected FormValidation doTestConnection(String region, String credentialsId, String sshKeysCredentialsId) {
+        protected FormValidation doTestConnection(String region, String credentialsId, String sshKeysCredentialsId, boolean associateHWCKeypair) {
             Jenkins.get().checkPermission(Jenkins.ADMINISTER);
             try {
                 SSHUserPrivateKey sshCredential = getSshCredential(sshKeysCredentialsId);
@@ -624,7 +629,7 @@ public abstract class VPC extends Cloud {
                 }
                 if (privateKey.trim().length() > 0) {
                     EcsClient ecsClient = createEcsClient(region, credentialsId);
-                    ECSPrivateKey pk = new ECSPrivateKey(privateKey, sshCredential.getId(), ecsClient);
+                    ECSPrivateKey pk = new ECSPrivateKey(sshCredential, associateHWCKeypair, ecsClient);
                     if (pk.find() == null) {
                         return FormValidation
                                 .error("The ECS key pair private key isn't registered to this EC2 region (fingerprint is "
