@@ -109,6 +109,7 @@ public class HuaweiVPC extends VPC {
             model.add("South China-Guangzhou(华南-广州)", "cn-south-1");
             model.add("Southwest-Guiyang I(西南-贵阳一)", "cn-southwest-2");
             model.add("Russia-Moscow II(俄罗斯-莫斯科二)", "ru-northwest-2");
+            model.add("Cloud.ru", "us-east-1");
             return model;
         }
 
