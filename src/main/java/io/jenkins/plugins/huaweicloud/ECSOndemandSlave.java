@@ -1,12 +1,10 @@
 package io.jenkins.plugins.huaweicloud;
 
 import com.huaweicloud.sdk.core.exception.SdkException;
-import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Node;
-import hudson.slaves.ComputerLauncher;
 import hudson.slaves.NodeProperty;
 import io.jenkins.plugins.huaweicloud.util.VPCHelper;
 import jenkins.model.Jenkins;

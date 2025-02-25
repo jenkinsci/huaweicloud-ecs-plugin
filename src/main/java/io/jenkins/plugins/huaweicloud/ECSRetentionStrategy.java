@@ -71,15 +71,15 @@ public class ECSRetentionStrategy extends RetentionStrategy<ECSComputer> impleme
      */
     @Override
     public void start(@NotNull ECSComputer c) {
-        //Jenkins is in the process of starting up
+        // Jenkins is in the process of starting up
         if (Jenkins.get().getInitLevel() != InitMilestone.COMPLETED) {
             String state = null;
             try {
                 state = c.getStatus();
-            } catch (SdkException | InterruptedException | NullPointerException e) {
+            } catch (SdkException | InterruptedException e) {
                 LOGGER.log(Level.FINE, "Error getting ECS instance state for " + c.getName(), e);
             }
-            if (!"ACTIVE".equals(state)) {
+            if (state == null || !"ACTIVE".equals(state)) {
                 LOGGER.info("Ignoring start request for " + c.getName()
                         + " during Jenkins startup due to ECS instance state of " + state);
                 return;

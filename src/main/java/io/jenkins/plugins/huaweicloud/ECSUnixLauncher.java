@@ -4,14 +4,11 @@ import com.huaweicloud.sdk.core.exception.SdkException;
 import com.huaweicloud.sdk.ecs.v2.model.NovaKeypair;
 import com.huaweicloud.sdk.ecs.v2.model.ServerAddress;
 import com.huaweicloud.sdk.ecs.v2.model.ServerDetail;
-import com.huaweicloud.sdk.eip.v2.model.PublicipShowResp;
 import com.trilead.ssh2.*;
 import hudson.ProxyConfiguration;
 import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.remoting.Channel;
-import io.jenkins.plugins.huaweicloud.util.AssociateEIP;
-import io.jenkins.plugins.huaweicloud.util.VPCHelper;
 import jenkins.model.Jenkins;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
@@ -94,99 +91,91 @@ public class ECSUnixLauncher extends ECSComputerLauncher {
             throw new IOException("Could not find corresponding slave template for " + computer.getDisplayName());
         }
 
-        logInfo(computer, listener, "Launching instance: " + node.getInstanceId());
-
-        try {
-            boolean isBootstrapped = bootstrap(computer, listener, template);
-            if (isBootstrapped) {
-                // connect fresh as ROOT
-                logInfo(computer, listener, "connect fresh as root");
-                cleanupConn = connectToSsh(computer, listener, template);
-                NovaKeypair key = computer.getCloud().getKeyPair();
-                if (key == null || !cleanupConn.authenticateWithPublicKey(computer.getRemoteAdmin(), key.getPrivateKey().toCharArray(), "")) {
-                    logWarning(computer, listener, "Authentication failed");
-                    return false; // failed to connect as root.
-                }
-            } else {
-                logWarning(computer, listener, "bootstrapresult failed");
-                return false; // bootstrap closed for us.
+        boolean isBootstrapped = bootstrap(computer, listener, template);
+        if (isBootstrapped) {
+            // connect fresh as ROOT
+            logInfo(computer, listener, "connect fresh as root");
+            cleanupConn = connectToSsh(computer, listener, template);
+            NovaKeypair key = computer.getCloud().getKeyPair();
+            if (key == null || !cleanupConn.authenticateWithPublicKey(computer.getRemoteAdmin(), key.getPrivateKey().toCharArray(), "")) {
+                logWarning(computer, listener, "Authentication failed");
+                return false; // failed to connect as root.
             }
-            conn = cleanupConn;
-            SCPClient scp = conn.createSCPClient();
-            String initScript = node.initScript;
-            String tmpDir = (Util.fixEmptyAndTrim(node.tmpDir) != null ? node.tmpDir : "/tmp");
-            logInfo(computer, listener, "Creating tmp directory (" + tmpDir + ") if it does not exist");
-            conn.exec("mkdir -p " + tmpDir, logger);
-            if (initScript != null && initScript.trim().length() > 0
-                    && conn.exec("test -e ~/.hudson-run-init", logger) != 0) {
-                logInfo(computer, listener, "Executing init script:" + initScript);
-                scp.put(initScript.getBytes("UTF-8"), "init.sh", tmpDir, "0700");
-                Session sess = conn.openSession();
-                sess.requestDumbPTY(); // so that the remote side bundles stdout
-                // and stderr
-                sess.execCommand(buildUpCommand(computer, tmpDir + "/init.sh"));
-
-                sess.getStdin().close(); // nothing to write here
-                sess.getStderr().close(); // we are not supposed to get anything
-                // from stderr
-                IOUtils.copy(sess.getStdout(), logger);
-
-                int exitStatus = waitCompletion(sess);
-                if (exitStatus != 0) {
-                    logWarning(computer, listener, "init script failed: exit code=" + exitStatus);
-                    return false;
-                }
-                sess.close();
-
-                logInfo(computer, listener, "Creating ~/.hudson-run-init");
-
-                // Needs a tty to run sudo.
-                sess = conn.openSession();
-                sess.requestDumbPTY(); // so that the remote side bundles stdout
-                // and stderr
-                sess.execCommand(buildUpCommand(computer, "touch ~/.hudson-run-init"));
-
-                sess.getStdin().close(); // nothing to write here
-                sess.getStderr().close(); // we are not supposed to get anything
-                // from stderr
-                IOUtils.copy(sess.getStdout(), logger);
-
-                exitStatus = waitCompletion(sess);
-                if (exitStatus != 0) {
-                    logWarning(computer, listener, "init script failed: exit code=" + exitStatus);
-                    return false;
-                }
-                sess.close();
-            }
-            checkAndInstallJava(computer, conn, "java -fullversion", logger, listener);
-            executeRemote(computer, conn, "which scp", "sudo yum install -y openssh-clients", logger, listener);
-            // Always copy so we get the most recent slave.jar
-            logInfo(computer, listener, "Copying remoting.jar to: " + tmpDir);
-            scp.put(Jenkins.get().getJnlpJars("remoting.jar").readFully(), "remoting.jar", tmpDir);
-            final String prefix = computer.getSlaveCommandPrefix();
-            final String suffix = computer.getSlaveCommandSuffix();
-            final String remoteFS = node.getRemoteFS();
-            final String workDir = Util.fixEmptyAndTrim(remoteFS) != null ? remoteFS : tmpDir;
-            String launchString = prefix + " java " + " -jar " + tmpDir + "/remoting.jar -workDir " + workDir + suffix;
-            // launchString = launchString.trim();
-            //TODO: use  ssh process if (slaveTemplate != null && slaveTemplate.isConnectBySSHProcess())
-            logInfo(computer, listener, "Launching remoting agent (via Trilead SSH2 Connection): " + launchString);
-            final Session sess = conn.openSession();
-            sess.execCommand(launchString);
-            computer.setChannel(sess.getStdout(), sess.getStdin(), logger, new Channel.Listener() {
-                @Override
-                public void onClosed(Channel channel, IOException cause) {
-                    sess.close();
-                    conn.close();
-                }
-            });
-            successful = true;
-        } catch (Exception e) {
-            return false;
-        } finally {
-            if (cleanupConn != null && !successful)
-                cleanupConn.close();
+        } else {
+            logWarning(computer, listener, "bootstrapresult failed");
+            return false; // bootstrap closed for us.
         }
+        conn = cleanupConn;
+        SCPClient scp = conn.createSCPClient();
+        String initScript = node.initScript;
+        String tmpDir = (Util.fixEmptyAndTrim(node.tmpDir) != null ? node.tmpDir : "/tmp");
+        conn.exec("mkdir -p " + tmpDir, logger);
+        if (initScript != null && initScript.trim().length() > 0
+                && conn.exec("test -e ~/.hudson-run-init", logger) != 0) {
+            logInfo(computer, listener, "Executing init script:" + initScript);
+            scp.put(initScript.getBytes("UTF-8"), "init.sh", tmpDir, "0700");
+            Session sess = conn.openSession();
+            sess.requestDumbPTY(); // so that the remote side bundles stdout
+            sess.execCommand(buildUpCommand(computer, tmpDir + "/init.sh"));
+
+            sess.getStdin().close(); // nothing to write here
+            sess.getStderr().close(); // we are not supposed to get anything
+            // from stderr
+            IOUtils.copy(sess.getStdout(), logger);
+
+            int exitStatus = waitCompletion(sess);
+            if (exitStatus != 0) {
+                logWarning(computer, listener, "init script failed: exit code=" + exitStatus);
+                return false;
+            }
+            sess.close();
+
+            logInfo(computer, listener, "Creating ~/.hudson-run-init");
+
+            // Needs a tty to run sudo.
+            sess = conn.openSession();
+            sess.requestDumbPTY(); // so that the remote side bundles stdout
+            // and stderr
+            sess.execCommand(buildUpCommand(computer, "touch ~/.hudson-run-init"));
+
+            sess.getStdin().close(); // nothing to write here
+            sess.getStderr().close(); // we are not supposed to get anything
+            // from stderr
+            IOUtils.copy(sess.getStdout(), logger);
+
+            exitStatus = waitCompletion(sess);
+            if (exitStatus != 0) {
+                logWarning(computer, listener, "init script failed: exit code=" + exitStatus);
+                return false;
+            }
+            sess.close();
+        }
+        checkAndInstallJava(computer, conn, "java -fullversion", logger, listener);
+        executeRemote(computer, conn, "which scp", "sudo yum install -y openssh-clients", logger, listener);
+        // Always copy so we get the most recent slave.jar
+        logInfo(computer, listener, "Copying remoting.jar to: " + tmpDir);
+        scp.put(Jenkins.get().getJnlpJars("remoting.jar").readFully(), "remoting.jar", tmpDir);
+        final String prefix = computer.getSlaveCommandPrefix();
+        final String suffix = computer.getSlaveCommandSuffix();
+        final String remoteFS = node.getRemoteFS();
+        final String workDir = Util.fixEmptyAndTrim(remoteFS) != null ? remoteFS : tmpDir;
+        String launchString = prefix + " java " + " -jar " + tmpDir + "/remoting.jar -workDir " + workDir + suffix;
+        // launchString = launchString.trim();
+        //TODO: use  ssh process if (slaveTemplate != null && slaveTemplate.isConnectBySSHProcess())
+        logInfo(computer, listener, "Launching remoting agent (via Trilead SSH2 Connection): " + launchString);
+        final Session sess = conn.openSession();
+        sess.execCommand(launchString);
+        computer.setChannel(sess.getStdout(), sess.getStdin(), logger, new Channel.Listener() {
+            @Override
+            public void onClosed(Channel channel, IOException cause) {
+                conn.close();
+            }
+        });
+        successful = true;
+
+        if (cleanupConn != null && !successful)
+            cleanupConn.close();
+
         return true;
     }
 

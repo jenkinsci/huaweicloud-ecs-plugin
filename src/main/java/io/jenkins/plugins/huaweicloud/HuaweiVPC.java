@@ -3,9 +3,7 @@ package io.jenkins.plugins.huaweicloud;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.Failure;
-import hudson.model.Label;
 import hudson.slaves.Cloud;
-import hudson.slaves.NodeProvisioner;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
@@ -17,8 +15,6 @@ import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 public class HuaweiVPC extends VPC {
